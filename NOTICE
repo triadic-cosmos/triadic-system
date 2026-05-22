@@ -1,0 +1,48 @@
+Triadic System
+Part of the Triadic Cosmos ecosystem
+Copyright © 2026 Joachim De Witte
+
+This software is developed by Joachim De Witte as part of the
+Triadic Cosmos research and universe framework.
+
+Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+You may not use this file except in compliance with the License.
+A copy of the License is available at:
+
+    https://www.gnu.org/licenses/agpl-3.0.html
+
+Unless required by applicable law or agreed to in writing, this software
+is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
+ANY KIND, either express or implied.
+
+-------------------------------------------------------------------------------
+Additional Notices and Attributions
+-------------------------------------------------------------------------------
+
+1. Scope of AGPL-3.0
+   The Triadic System codebase is licensed under AGPL-3.0. Any modified
+   versions, extensions, or network-based use of this software must comply
+   with the AGPL-3.0 copyleft and source-disclosure requirements.
+
+2. Separation of Code and Data
+   This repository contains only the Triadic System source code. Training
+   data, generated artifacts, and model outputs are not covered by AGPL-3.0
+   and are licensed separately in the triadic-data repository.
+
+3. Data Licensing
+   - Training data and generated data included or referenced by this project
+     are licensed under permissive terms (MIT or equivalent), unless stated
+     otherwise in the triadic-data repository.
+   - Some datasets originate from third-party sources (e.g., Project Gutenberg)
+     and retain their original licenses and attribution requirements. See the
+     corresponding LICENSE files in triadic-data for details.
+
+4. Trademark and Ecosystem Notice
+   “Triadic System” and “Triadic Cosmos” refer to the research framework and
+   conceptual architecture created by Joachim De Witte. These names may not be
+   used to imply endorsement of derivative works without explicit permission.
+
+5. Generated Artifacts
+   Outputs produced by the Triadic System engine (e.g., generated text,
+   embeddings, intermediate artifacts) are permissively licensed unless
+   explicitly stated otherwise. See triadic-data for applicable terms.
