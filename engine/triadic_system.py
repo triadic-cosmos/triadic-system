@@ -17,8 +17,9 @@ from dmlg import (
 )
 
 PREFIX = "gen"
-MODELS = ["horror", "hyde", "observatory", "poet", "mix", "prompt"]
-VARIANCE = 0.5
+MODELS = ["aesop", "forest", "hyde", "observatory", "poet", "mix", "distill"]
+VARIANCE = 0.3
+MAX_LINES = 50
 
 @dataclass
 class TriadicSystem:
@@ -42,24 +43,21 @@ class TriadicSystem:
             self.environments[model] = environment
             self.agent_dict[model] = self.builder.load_or_create_agent(environment)
            
-        self.environments["prompt"].configuration.story_lines = 2
-        self.fallback_agent: MultiAgent = MultiAgent( \
-            self.environments["prompt"], [self.agent_dict["prompt"]], [10], VARIANCE)
         self.multi_agents: List[MultiAgent] = [
-            self.agent_dict["horror"],
+            self.agent_dict["forest"],
             self.agent_dict["observatory"],
             self.agent_dict["poet"],
+            self.agent_dict["aesop"],
             self.agent_dict["hyde"]
         ]
-        self.multi_weights = [3, 2, 2, 1]
+        self.multi_weights = [3, 2, 2, 1, 1]
 
     def print_info(self):
         print("\n\n***** The Triadic Cosmos: DMLG Demo System *****\n")
         print(f"models = {self.agent_dict.keys()}\n")
         print("Welcome to the Dynamic Modular Language Graph demo system!")
         print("You can ask to generate a story with the following prompt :")
-        print("[1-20] lines and model [a model name from above list or multi].")
-        print("Or you can just type a short sentence to chat with the prompt model.\n")
+        print(f"[1-{MAX_LINES}] lines and model [a model name from above list or multi].")
         print("To repeat the last prompt enter repeat in your prompt.")
         print("To toggle between sampling and beam search mode, enter beam in your prompt.")
         print("To quit enter either stop, quit or exit in your prompt.\n")
@@ -69,7 +67,6 @@ class TriadicSystem:
         use_beam_search = False
         last_prompt = "Hello!"
         variance = VARIANCE
-        prompt_ctx: ContextWindow = ContextWindow(self.story_configuration)
         story_ctx: ContextWindow = ContextWindow(self.story_configuration)
 
         while True:
@@ -108,11 +105,9 @@ class TriadicSystem:
                 multi_agent.write_story("STORY", story_ctx, None, None, use_beam_search)
                 continue
 
-            # fallback to prompt model to generate reply
-            keywords = self.fallback_agent.generate_keywords(prompt)
-            print(f"keywords = {keywords}")
-            self.fallback_agent.write_story("REPLY", prompt_ctx, prompt, keywords, True)
-
+            # fallback reply
+            print("How can I help you?")
+            
 
 # Check if prompt contains a request to quit
 def parse_quit_request(prompt):
@@ -129,7 +124,7 @@ def parse_beam_request(prompt):
 # Check if prompt contains a request to generate a story
 def parse_story_request(text):
     # allowed model names
-    models = r"(hyde|horror|observatory|poet|mix|multi|prompt)"
+    models = r"(aesop|forest|hyde|observatory|poet|mix|distill|multi)"
     
     # regex: zoek {number} lines en model {name} in willekeurige volgorde
     pattern = rf"(?i)(?=.*\b(\d+)\s*lines?\b)(?=.*\bmodel\s+{models}\b)"
@@ -151,7 +146,7 @@ def parse_story_request(text):
     model = model_match.group(1).lower()
 
     # validate number range
-    if not (1 <= number <= 20):
+    if not (1 <= number <= MAX_LINES):
         return None
 
     return number, model

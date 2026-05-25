@@ -24,7 +24,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
-def is_nonlinear(x, y, threshold=0.09):
+def is_nonlinear(x, y, threshold=0.15):
     x_np = x.cpu().numpy().flatten()
     y_np = y.cpu().numpy().flatten()
 
@@ -53,15 +53,15 @@ print("Device:", device)
 
 with torch.no_grad():
     x_act = torch.linspace(-4, 4, 4000).unsqueeze(1).to(device)
-    y_default = F.gelu(x_act).cpu()
+    y_default = F.silu(x_act).cpu()
     
     plt.figure(figsize=(10,5))
-    plt.plot(x_act.cpu(), y_default, label="GeLU")
+    plt.plot(x_act.cpu(), y_default, label="SiLU")
     
     index = 1
     
     for pn in agent.paged_network.nets.values():
-        if pn is not None and pn.network.act != F.gelu:
+        if pn is not None and pn.network.act != F.silu:
             page: TokenPage = pn.page
             f = pn.network.act_mlp.to(device)
             y_f = f(x_act).cpu()

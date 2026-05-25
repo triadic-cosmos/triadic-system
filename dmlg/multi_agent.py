@@ -36,7 +36,7 @@ class MultiAgent:
                 selected = self.agents[i]
         return selected
 
-    def propose_token(self, model_input: ModelInput) -> Optional[Token]:
+    def propose_token(self, model_input: ModelInput, first: bool) -> Optional[Token]:
         for i in range(self.environment.configuration.token_retries):
             agent = self.select_agent()
             outputs: List[TokenLogit] = agent.paged_network.propose(model_input)
@@ -44,7 +44,11 @@ class MultiAgent:
             if not outputs:
                 continue
 
-            if len(outputs) == 1 or self.variance <= 0.0:
+            if len(outputs) == 1:
+                selected = outputs[0]
+            elif first:
+                selected = self.rng.choice(outputs)
+            elif self.variance <= 0.0:
                 selected = outputs[0]
             else:
                 random_chance = self.rng.random()
@@ -72,13 +76,15 @@ class MultiAgent:
             
     def generate_sentence(self, sequence: List[float], line: float, ctx: ContextWindow) -> List[Token]:
         generated: List[Token] = []
+        first = True
 
         for _ in range(self.max_tokens):
-            proposal = self.propose_token(ModelInput(ctx, sequence, line))
+            proposal = self.propose_token(ModelInput(ctx, sequence, line), first)
             if proposal is None:
                 break
             generated.append(proposal)
             ctx.add_token(proposal)
+            first = False
             if proposal == Token.EOL:
                 return generated
 
@@ -199,6 +205,22 @@ class MultiAgent:
         for sentence in story.sentences:
             sentence.fixed = self.environment.grammar.fix_grammar(sentence.natural) 
 
+    # writes single sentence using quality checks, adds sentence to context
+    def write_sentence(self, sentences: List[str], ctx: ContextWindow, line: float, keywords: Set[str] = None) -> str:
+        sequence = self.agents[0].choose_best_embedding(keywords)
+        while True:
+            sentence = self.generate_sentence(sequence, line, ctx)
+            if self.environment.grammar.basic_validate_grammar_tokens(sentence):
+                natural = self.environment.grammar.convert_from_canonical_tokens(sentence)
+                if self.environment.semantic.validate(sentences, natural):
+                    fixed = self.environment.grammar.fix_grammar(natural)
+                    # use grammar fixed to check if there are no issues in sentence
+                    if natural == fixed:
+                        sentences.append(fixed)
+                        encoded = self.sentence_encoder.encode_sentence(sentence)
+                        ctx.add_sentence(encoded)
+                        return fixed
+    
     def write_story(self, prefix: str, ctx: ContextWindow, prompt: str = None, keywords: Set[str] = None, beam_search: bool = False) -> WriterStory:
         index:int = 0
         lines: int = self.environment.configuration.story_lines
@@ -207,9 +229,6 @@ class MultiAgent:
         sequence_embedding = self.agents[0].choose_best_embedding(keywords)
 
         if prompt != None and len(prompt) > 0:
-            if lines == 2:
-                # for prompt model, first line of story is the prompt
-                index = 1
             while True:
                 # fill up whole context with prompt
                 for prompt_line in prompt:

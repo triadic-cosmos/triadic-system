@@ -39,7 +39,7 @@ class NeuralNetwork(nn.Module):
             self.act_mlp = ActivationMLP(activation_size)
             self.act = AMLPActivation(self.act_mlp)
         else:
-            self.act = F.gelu # use fixed activation function
+            self.act = F.silu # use fixed activation function
 
     def forward(self, x):
         h = self.act(self.fc1(x))

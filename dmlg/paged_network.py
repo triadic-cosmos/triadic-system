@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from uuid import uuid4, UUID
 import torch
 import random
+import math
 
 from .config import Configuration
 from .tokens import Token, TokenPage, TokenMapping, TokenLogit
@@ -13,6 +14,7 @@ from .transition_map import TransitionMap
 from .rule_based import RuleBasedFilter
 
 rule_based = RuleBasedFilter()
+override_warning = True
 
 @dataclass
 class TrainingSample:
@@ -148,9 +150,17 @@ class PagedNetwork:
         input_size = page.input_size()
         output_size = page.output_size()
         hidden_size = suggest_hidden_size(input_size, output_size)
-        activation_size = suggest_activation_hidden_size(input_size, output_size)
-        if activation_size > 0:
+        activation_size = power_suggest_activation_hidden_size(input_size, output_size)
+        if input_size + output_size >= 100:
             print(f"{input_size} -> {output_size} : {hidden_size} {activation_size}")
+        if self.configuration.activation_hidden_size > 0:
+            # override calculated activation hidden size
+            activation_size = self.configuration.activation_hidden_size
+            global override_warning
+            if override_warning:
+                print(f"Activation hidden size is fixed to {activation_size}!")
+                override_warning = False
+
         # create optimized network
         encoder: InputEncoder = InputEncoder()
         network: PredictionNetwork = PredictionNetwork(
@@ -272,9 +282,16 @@ def suggest_hidden_size(n_in, n_out, h_min=4, h_max=96):
     # clamp to min/max
     return max(h_min, min(h, h_max))
 
-def suggest_activation_hidden_size(n_in, n_out):
+def threshold_suggest_activation_hidden_size(n_in, n_out):
     C = n_in * n_out
     if C < 100: return 0  # no activation network
     if C < 1000: return 4
     if C < 10000: return 6
     return 8
+
+def power_suggest_activation_hidden_size(n_in, n_out):
+    C = n_in * n_out
+    alpha = 0.28
+    k = 1.8
+    h = k * (C ** alpha)
+    return max(4, min(128, int(h)))

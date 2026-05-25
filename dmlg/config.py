@@ -7,6 +7,8 @@ class Configuration:
     name: str
     # model
     hidden_size: int = 16
+    # use a non-zero value to override calculated activation hidden size
+    activation_hidden_size: int = 0 
     max_page_inputs: int = 64
     # context
     generator_history_sentences = [5, 20]
@@ -18,8 +20,9 @@ class Configuration:
     min_story_lines: int = 3 # 2 for prompt
     min_sentence_length: int = 10
     epochs_step: int = 10
+    # needed epochs depend on dataset size
     explorer_training_epochs: int = 2000 
-    generator_training_epochs: int = 1000 # depends on dataset size
+    generator_training_epochs: int = 1000 
     # generation
     min_words: int = 5
     max_words: int = 25
