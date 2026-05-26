@@ -3,6 +3,20 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# Special activation functions
+def silugelu(x):
+    return F.silu(x) + 0.3 * F.gelu(x)
+
+def hardgate(x):
+    return (x > 0.2).float() * x
+
+def explodegate(x):
+    return x * torch.exp(0.5 * x)
+
+def spike(x):
+    return torch.exp(-10 * x * x)
+
+# Activation MLP
 class ActivationMLP(nn.Module):
     def __init__(self, hidden):
         super().__init__()
@@ -23,6 +37,7 @@ class AMLPActivation(nn.Module):
     def forward(self, x):
         return self.f(x.unsqueeze(-1)).squeeze(-1)
 
+# Main MLP
 class NeuralNetwork(nn.Module):
     def __init__(self, input_size, hidden_size, activation_size, output_size):
         super().__init__()

@@ -57,8 +57,15 @@ POET_PROMPT = "The table, the dust, the breath between syllables."
 start = time.perf_counter()
 
 print("Generating stories...")
-model = "aesop"
-writer: TriadicWriter = TriadicWriter(model, 20, 0.3)
-writer.write(20, AESOP_PROMPT, AESOP_KEYWORDS, True)
+
+model = "mix"
+prefix = "gen"
+number_lines = 20
+number_stories = 20
+variance = 0.3
+beam_search = True
+
+writer: TriadicWriter = TriadicWriter(model, prefix, number_lines, variance)
+writer.write(number_stories, POET_PROMPT, POET_KEYWORDS, beam_search)
 
 print(f"Time: {time.perf_counter() - start:.1f} s")
