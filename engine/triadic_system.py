@@ -17,7 +17,7 @@ from dmlg import (
 )
 
 PREFIX = "gen"
-MODELS = ["aesop", "forest", "hyde", "observatory", "poet", "mix", "distill"]
+MODELS = ["aesop", "forest", "frankenstein", "hyde", "observatory", "poet", "mix", "distill"]
 VARIANCE = 0.3
 MAX_LINES = 50
 
@@ -124,7 +124,7 @@ def parse_beam_request(prompt):
 # Check if prompt contains a request to generate a story
 def parse_story_request(text):
     # allowed model names
-    models = r"(aesop|forest|hyde|observatory|poet|mix|distill|multi)"
+    models = r"(aesop|forest|frankenstein|hyde|observatory|poet|mix|distill|multi)"
     
     # regex: zoek {number} lines en model {name} in willekeurige volgorde
     pattern = rf"(?i)(?=.*\b(\d+)\s*lines?\b)(?=.*\bmodel\s+{models}\b)"
