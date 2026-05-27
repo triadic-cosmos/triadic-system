@@ -27,17 +27,20 @@ class AgentBuilder:
         self.grammar = GrammarEngine(self.configuration)
         self.semantic = SemanticEngine(self.configuration)
     
+    def environment_path(self, environment: WriterEnvironment) -> str:
+        return DATA_FOLDER + environment.configuration.name + "/"
+        
     def curriculum_filename(self, environment: WriterEnvironment, curriculum: str) -> str:
-        return DATA_FOLDER + environment.configuration.name + "/" + curriculum + ".txt"
+        return self.environment_path(environment) + curriculum + ".txt"
 
     def preprocessed_filename(self, environment: WriterEnvironment, curriculum: str) -> str:
-        return DATA_FOLDER + environment.configuration.name + "/" + curriculum + TOKENS_FILENAME
+        return self.environment_path(environment) + curriculum + TOKENS_FILENAME
 
     def model_filename(self, environment: WriterEnvironment) -> str:
-        return DATA_FOLDER + environment.configuration.name + "/" + environment.prefix + MODEL_FILENAME
+        return self.environment_path(environment) + environment.prefix + MODEL_FILENAME
 
     def output_filename(self, environment: WriterEnvironment) -> str:
-        return DATA_FOLDER + environment.configuration.name + "/" + environment.prefix + OUTPUT_FILENAME
+        return self.environment_path(environment) + environment.prefix + OUTPUT_FILENAME
 
     def load_or_create_agent(self, environment: WriterEnvironment) -> WriterAgent:
         name = environment.configuration.name

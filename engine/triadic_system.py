@@ -13,7 +13,7 @@ from dmlg import (
     GrammarEngine,
     SemanticEngine,
     Curriculum,
-    TokenPage,
+    TokenPage
 )
 
 PREFIX = "gen"
