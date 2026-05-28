@@ -50,8 +50,7 @@ The `engine/` package contains the helper classes used by the runnable
 entry points (“mains”).  
 
 It does **not** contain the runners themselves — all seven runners are
-located in the **project root**, following the same layout as the
-Triadic Toys projects.
+located in the **project root**.
 
 `engine/` provides the orchestration layer around the core DMLG engine:
 
