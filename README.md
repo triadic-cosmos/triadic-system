@@ -2,8 +2,7 @@
 
 **Triadic System** is the reference implementation of the  
 **Dynamic Modular Language Graph (DMLG)** — a minimal, transparent,  
-fully functional language‑generation engine built from only sixteen  
-Python classes.
+fully functional language‑generation engine.
 
 Where modern language models rely on scale, the DMLG relies on  
 **structure**: deterministic tokens, canonical grammar, fixed‑position  
