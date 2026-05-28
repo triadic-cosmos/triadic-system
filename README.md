@@ -22,7 +22,7 @@ All components are implemented in Python and can be run independently.
 
 The project is organized into two packages:
 
-### **1. `dmlg/` — The Core Engine (16 classes)**  
+### **1. `dmlg/` — The Core Engine **  
 This package contains the full DMLG architecture:
 
 - **Configuration** — global model, context, curriculum and generation settings  
@@ -41,21 +41,31 @@ This package contains the full DMLG architecture:
 - **WriterAgent** — a micro‑expert trained on a curriculum  
 - **MultiAgent** — ensemble of micro‑experts  
 
-These sixteen classes form the complete DMLG engine.
+These classes form the complete DMLG engine.
 
 ---
 
-### **2. `engine/` — Runners and System Helpers**
+### **2. `engine/` — System Helpers (runners live in the project root)**
 
-This package contains the runnable entry points (“mains”) and helper  
-classes for training, generation, distillation, ensembles and demos.
+The `engine/` package contains the helper classes used by the runnable
+entry points (“mains”).  
 
-There are **seven official runners**, each demonstrating a different  
-aspect of the system.
+It does **not** contain the runners themselves — all seven runners are
+located in the **project root**, following the same layout as the
+Triadic Toys projects.
+
+`engine/` provides the orchestration layer around the core DMLG engine:
+
+- **TriadicTrainer** — curriculum loading, exploration, training  
+- **TriadicWriter** — story generation utilities  
+- **TriadicSystem** — environment setup for the interactive demo  
 
 ---
 
 ## Runners
+
+There are **seven official runners**, each demonstrating a different  
+aspect of the system.
 
 ### **1. Interactive Demo**  
 Run the full multi‑agent DMLG system in a prompt‑driven loop.
@@ -137,7 +147,7 @@ The Triadic System serves as:
 - **a research platform** for structural language models  
 - **a demonstration** of minimal, interpretable generative systems  
 - **a toolkit** for training, distillation, ensembles and activation analysis  
-- **a companion** to *The Triadic Cosmos* book and papers  
+- **a companion** to *The Triadic Cosmos* DMLG book and paper
 
 It complements the Triadic Cosmos ecosystem by providing runnable,  
 transparent examples of the concepts described there.
@@ -164,7 +174,7 @@ content. It is a standalone computational demonstration.
 The repository contains:
 
 - `/` — the runners  
-- `dmlg/` — the 16‑class DMLG engine  
+- `dmlg/` — the full DMLG engine  
 - `engine/` — helper classes  
 - `README.md` — this document  
 
