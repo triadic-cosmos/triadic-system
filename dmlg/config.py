@@ -17,7 +17,7 @@ class Configuration:
     # curriculum
     no_roundtrip: bool = True
     max_stories: int = 2000
-    min_story_lines: int = 3 # 2 for prompt
+    min_story_lines: int = 3
     min_sentence_length: int = 10
     epochs_step: int = 10
     # needed epochs depend on dataset size

@@ -39,6 +39,7 @@ This package contains the full DMLG architecture:
 - **WriterSentence**, **WriterStory** — natural output representation  
 - **WriterAgent** — a micro‑expert trained on a curriculum  
 - **MultiAgent** — ensemble of micro‑experts  
+- **ModeratedAgent** — agent that is moderated by ensemble of other agents
 
 These classes form the complete DMLG engine.
 
@@ -62,7 +63,7 @@ located in the **project root**.
 
 ## Runners
 
-There are **seven official runners**, each demonstrating a different  
+There are **eight official runners**, each demonstrating a different  
 aspect of the system.
 
 ### **1. Interactive Demo**  
@@ -134,6 +135,13 @@ Shows:
 ### **7. Adaptive Activation Function Demo**  
 Demonstrates how a small trainable activation‑MLP can learn complex  
 non‑linear functions and outperform static activations inside a larger model.
+
+---
+
+### **8. Moderated Agent Runner **
+Demonstrates how DMLG agent can be moderated by an ensemble of other DMLG agents.
+Also shows how the output quality of weaker models can be elevated by moderation.
+This illustrates the usage of DMLG agents for language model moderation.
 
 ---
 

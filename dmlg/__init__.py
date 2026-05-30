@@ -80,6 +80,9 @@ from .transition_map import TransitionMap
 
 from .rule_based import RuleBasedFilter
 
+# --- Moderation Agent -----------------------------------------------------
+
+from .moderated_agent import ModeratedAgent, ModeratedSentence
 
 # --- Public API -----------------------------------------------------------
 
@@ -133,4 +136,8 @@ __all__ = [
 
     # Rule-Based
     "RuleBasedFilter",
+    
+    # Moderated Agent
+    "ModeratedAgent",
+    "ModeratedSentence"
 ]
