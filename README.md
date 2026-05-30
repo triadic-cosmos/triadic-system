@@ -138,7 +138,7 @@ non‑linear functions and outperform static activations inside a larger model.
 
 ---
 
-### **8. Moderated Agent Runner **
+### **8. Moderated Agent Runner**
 Demonstrates how DMLG agent can be moderated by an ensemble of other DMLG agents.
 Also shows how the output quality of weaker models can be elevated by moderation.
 This illustrates the usage of DMLG agents for language model moderation.
