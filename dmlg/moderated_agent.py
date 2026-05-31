@@ -33,22 +33,24 @@ class ModeratedAgent:
     moderators: List[WriterAgent]
     rng: random.Random = field(init=False)
     sentence_encoder: SentenceEncoder = field(init=False)
+    nr_moderators: int = field(init=False)
 
     def __post_init__(self):
         self.rng = random.Random()
         self.sentence_encoder = SentenceEncoder()
+        self.nr_moderators = len(self.moderators)
 
-    def propose_token(self, agent: WriterAgent, model_input: ModelInput, first: bool) -> List[Token]:
+    def propose_token(self, agent: WriterAgent, model_input: ModelInput, first: bool) -> List[TokenLogit]:
         outputs: List[TokenLogit] = agent.paged_network.propose(model_input)
         if outputs:
             return outputs
         return []
 
-    def generate_sentence(self, sequence: List[float], line: float, ctx: ContextWindow, min_votes: int = 0) -> List[Token]:
+    def generate_sentence(self, sequence: List[float], line: float, ctx: ContextWindow, min_grammar_votes: int) -> ModeratedSentence:
         max_tokens: int = self.environment.configuration.max_tokens
         generated_tokens: List[Token] = []
         # number of moderators that agree on each token
-        generated_votes: List[int] = [] 
+        generated_votes: List[int] = []
         success = False
 
         for pos in range(max_tokens):
@@ -74,15 +76,14 @@ class ModeratedAgent:
                         votes[p.token] += 1
             
             max_vote = max(votes.values())
-            if max_vote < min_votes:
-                # hard stop when there are not enough votes
-                break
-
             if max_vote == 0:
                 # when no votes always take best token
                 selected = proposal[0].token 
             else:
-                best_proposals = [t for t in votes.keys() if votes[t] == max_vote]
+                best_proposals = [t for t in votes.keys() if filter_token(votes[t], max_vote, min_grammar_votes, t.is_lemma())]
+                # grammar tokens need vote from a minumum number of moderators
+                if not best_proposals:
+                    break
                 selected = self.rng.choice(best_proposals)
                 
             generated_tokens.append(selected)
@@ -98,7 +99,7 @@ class ModeratedAgent:
             ctx.add_token(Token.EOL)
         return ModeratedSentence(generated_tokens, generated_votes, success)
 
-    def generate_stories(self, output_filename: str, stories: int, lines: int, min_confidence: float = 0, min_votes: int = 0):
+    def generate_stories(self, output_filename: str, stories: int, lines: int, min_grammar_votes: int, min_confidence: float = 0):
         with open(output_filename, "w", encoding='utf-8-sig') as file:
             for story in range(1, stories + 1):
                 print(f"Generating story {story}")
@@ -109,9 +110,9 @@ class ModeratedAgent:
                 
                 while line <= lines:
                     line_fraction = (line - 1) / (lines - 1)
-                    moderated_sentence = self.generate_sentence(sequence, line_fraction, ctx, min_votes)
+                    moderated_sentence = self.generate_sentence(sequence, line_fraction, ctx, min_grammar_votes)
                     if moderated_sentence.success:
-                        confidence = moderated_sentence.confidence(len(self.moderators))
+                        confidence = moderated_sentence.confidence(self.nr_moderators)
                         if confidence >= min_confidence:
                             sentence = moderated_sentence.tokens
                             if self.environment.grammar.basic_validate_grammar_tokens(sentence):
@@ -120,7 +121,7 @@ class ModeratedAgent:
                                     fixed = self.environment.grammar.fix_grammar(natural)
                                     # check if there are no grammatical issues
                                     if natural == fixed:
-                                        marked = mark_sentence(fixed, moderated_sentence, len(self.moderators))
+                                        marked = mark_sentence(fixed, moderated_sentence, self.nr_moderators)
                                         sentences.append(fixed)
                                         encoded = self.sentence_encoder.encode_sentence(sentence)
                                         ctx.add_sentence(encoded)
@@ -131,6 +132,13 @@ class ModeratedAgent:
                 
                 file.write("\n")
                 file.flush()
+
+# Filter a token based on number of votes
+def filter_token(votes: int, max_votes: int, min_grammar_votes: int, lemma: bool):
+    if lemma or max_votes > min_grammar_votes:
+        return votes == max_votes
+    else:
+        return votes >= min_grammar_votes
 
 # Mark all unsure words in moderated sentence
 def mark_sentence(natural: str, sentence: ModeratedSentence, max_votes: int) -> str:
