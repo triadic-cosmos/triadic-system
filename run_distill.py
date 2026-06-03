@@ -9,19 +9,22 @@ from dmlg import (
 )
 
 # Distillation main
-configuration: Configuration = Configuration("aesop")
+model = "dorian"
+prefix = "15k"
+
+configuration: Configuration = Configuration(model)
 
 builder: AgentBuilder = AgentBuilder(Configuration)
 
-environment = builder.build_environment(configuration, "gen")
-output_filename = builder.curriculum_filename(environment, "distill")
+environment = builder.build_environment(configuration, prefix)
+output_filename = builder.curriculum_filename(environment, prefix + "_distill")
 agent = builder.load_or_create_agent(environment)
 multi_agent: MultiAgent = MultiAgent(agent.environment, [agent], [10], 0.5)
 
 # Distillation
 print("Starting distillation...")
-stories = 100
-lines = 20
+stories = 20
+lines = 111
     
 with open(output_filename, "w", encoding='utf-8-sig') as file:
     for story in range(1, stories + 1):

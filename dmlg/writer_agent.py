@@ -12,6 +12,7 @@ from .tokens import Token, TokenDictionary, TokenLogit
 from .context import ContextWindow, ModelInput
 from .paged_network import PagedNetwork, TrainingBatch
 from .transition_map import TransitionMap
+from .neural import ActivationMLP
 from .curriculum import Curriculum, CurriculumStory, CurriculumSentence
 from .grammar import GrammarEngine
 from .semantic import SemanticEngine
@@ -28,6 +29,7 @@ class WriterAgent:
     transition_map: TransitionMap = field(init=False)
     paged_network: PagedNetwork = field(init=False)
     token_dictionary: TokenDictionary = field(init=False)
+    activation_mlp: ActivationMLP = field(init=False)
 
     training_count: int = 0
 
@@ -40,10 +42,13 @@ class WriterAgent:
 
         self.transition_map = TransitionMap()
 
-        # PagedNetwork verwacht transition_map
+        # shared activation MLP for all pages
+        self.activation_mlp = ActivationMLP(self.configuration.activation_hidden_size)
+
         self.paged_network = PagedNetwork(
             configuration=self.configuration,
-            transition_map=self.transition_map
+            transition_map=self.transition_map,
+            activation_mlp=self.activation_mlp
         )
 
         self.token_dictionary = TokenDictionary()
@@ -74,6 +79,7 @@ class WriterAgent:
                     self.paged_network.learn(model_input, target, batch)
                     model_input.window.add_token(target)
                 context_window.add_sentence(sentence.encoded)
+                context_window.update_narrative_memory(sentence.tokens)
                 line += 1
             if epoch % self.environment.configuration.epochs_step == 0:
                 print(epoch)
@@ -203,6 +209,7 @@ class WriterAgent:
             "token_dictionary": self.token_dictionary,
             "transition_map": self.transition_map,
             "paged_network": self.paged_network,
+            "activation_mlp": self.activation_mlp,
             "training_count": self.training_count,
             "keyword_map": self.keyword_map,
             "keyword_count": self.keyword_count,
@@ -220,6 +227,7 @@ class WriterAgent:
         agent.token_dictionary = state["token_dictionary"]
         agent.transition_map = state["transition_map"]
         agent.paged_network = state["paged_network"]
+        agent.activation_mlp = state["activation_mlp"]
         agent.training_count = state["training_count"]
         agent.keyword_map = state["keyword_map"]
         agent.keyword_count = state["keyword_count"]

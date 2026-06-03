@@ -10,23 +10,18 @@ from dmlg import (
     WriterEnvironment
 )
 
-MODELS = [
-    "8", "32", "32sg", "128", "power",
-    "tanh", "silu", "gelu", "silugelu",
-    "relu", "leakyrelu", "softplus",
-    "hardgate", "spike", "micro"
-]
+MODELS = ["5k", "10k", "15k", "20k"]
 
 # Generation main
 start = time.perf_counter()
 
-configuration = Configuration("mix")
+configuration = Configuration("dorian")
 builder = AgentBuilder(configuration)
 environment = builder.build_environment(configuration, "gen")
 
 # Load agents ensemble
-agents = [builder.load_or_create_agent(environment)]
-path = builder.environment_path(environment) + "models/"
+agents = []
+path = builder.environment_path(environment)
 for model in MODELS:
     print(f"Loading agent {model}.")
     agent = WriterAgent.load(environment, path + model + "_model.bin")
@@ -38,8 +33,8 @@ output_filename = builder.curriculum_filename(environment, "ensemble")
 
 # Distillation
 print("Starting ensemble distillation...")
-stories = 100
-lines = 100
+stories = 20
+lines = 111
     
 with open(output_filename, "w", encoding='utf-8-sig') as file:
     for story in range(1, stories + 1):

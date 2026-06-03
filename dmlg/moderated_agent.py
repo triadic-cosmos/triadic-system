@@ -37,7 +37,7 @@ class ModeratedAgent:
 
     def __post_init__(self):
         self.rng = random.Random()
-        self.sentence_encoder = SentenceEncoder()
+        self.sentence_encoder = self.environment.sentence_encoder
         self.nr_moderators = len(self.moderators)
 
     def propose_token(self, agent: WriterAgent, model_input: ModelInput, first: bool) -> List[TokenLogit]:
@@ -121,7 +121,10 @@ class ModeratedAgent:
                                     fixed = self.environment.grammar.fix_grammar(natural)
                                     # check if there are no grammatical issues
                                     if natural == fixed:
-                                        marked = mark_sentence(fixed, moderated_sentence, self.nr_moderators)
+                                        if self.environment.configuration.mark_sentence:
+                                            marked = mark_sentence(fixed, moderated_sentence, self.nr_moderators)
+                                        else:
+                                            marked = fixed
                                         sentences.append(fixed)
                                         encoded = self.sentence_encoder.encode_sentence(sentence)
                                         ctx.add_sentence(encoded)

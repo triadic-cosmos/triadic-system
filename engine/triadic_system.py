@@ -16,8 +16,8 @@ from dmlg import (
     TokenPage
 )
 
-PREFIX = "gen"
-MODELS = ["aesop", "forest", "frankenstein", "hyde", "observatory", "poet", "mix", "distill"]
+PREFIX = "15k"
+MODELS = ["dorian", "hyde", "time"]
 VARIANCE = 0.3
 MAX_LINES = 50
 
@@ -44,13 +44,11 @@ class TriadicSystem:
             self.agent_dict[model] = self.builder.load_or_create_agent(environment)
            
         self.multi_agents: List[MultiAgent] = [
-            self.agent_dict["forest"],
-            self.agent_dict["observatory"],
-            self.agent_dict["poet"],
-            self.agent_dict["aesop"],
-            self.agent_dict["hyde"]
+            self.agent_dict["dorian"],
+            self.agent_dict["hyde"],
+            self.agent_dict["time"]
         ]
-        self.multi_weights = [3, 2, 2, 1, 1]
+        self.multi_weights = [10, 10, 10] 
 
     def print_info(self):
         print("\n\n***** The Triadic Cosmos: DMLG Demo System *****\n")
@@ -124,7 +122,7 @@ def parse_beam_request(prompt):
 # Check if prompt contains a request to generate a story
 def parse_story_request(text):
     # allowed model names
-    models = r"(aesop|forest|frankenstein|hyde|observatory|poet|mix|distill|multi)"
+    models = r"(dorian|hyde|time|multi)"
     
     # regex: zoek {number} lines en model {name} in willekeurige volgorde
     pattern = rf"(?i)(?=.*\b(\d+)\s*lines?\b)(?=.*\bmodel\s+{models}\b)"

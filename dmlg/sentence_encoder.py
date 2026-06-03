@@ -2,62 +2,73 @@
 from dataclasses import dataclass
 from typing import List
 
-from .tokens import Token
+from .tokens import Token, LARGE_EMBEDDING_SIZE, MEDIUM_EMBEDDING_SIZE
 
-LARGE_LENGTH = 10
-MEDIUM_LENGTH = 5
-LARGE_EMPTY = [Token.NONE.context_embedding] * LARGE_LENGTH
-MEDIUM_EMPTY = [Token.NONE.context_embedding] * MEDIUM_LENGTH
+NR_TOKEN_SLOTS = 6
+TOKEN_SLOTS = {
+    "<VERB>": 0,
+    "<BASE>": 0,
+    "<NOUN>": 1,
+    "<ADJ>": 2,
+    "<ADV>": 3,
+    "<ADP>": 4,
+    "<PRON>": 5,
+}
 
 @dataclass
 class EncodedSentence:
-    large: List[Token]
     large_embedding: List[float]
-    medium: List[Token]
     medium_embedding: List[float]
 
-EMPTY_SENTENCE = EncodedSentence([], LARGE_EMPTY, [], MEDIUM_EMPTY)
+
+EMPTY_SENTENCE = EncodedSentence(
+    Token.NONE.large_embedding * NR_TOKEN_SLOTS,
+    Token.NONE.medium_embedding * NR_TOKEN_SLOTS)
+
 
 @dataclass
 class SentenceEncoder:
     def encode_sentence(self, tokens: List[Token]) -> EncodedSentence:
-        noun_verb: List[Token] = []
-        adj_adv: List[Token] = []
-        adp_pron: List[Token] = []
+        large_slots = [0.0] * (NR_TOKEN_SLOTS * LARGE_EMBEDDING_SIZE)
+        medium_slots = [0.0] * (NR_TOKEN_SLOTS * MEDIUM_EMBEDDING_SIZE)
+        slot_counts = [0] * NR_TOKEN_SLOTS
 
-        prev_tag = None
+        prev_slot = -1
 
         for token in tokens:
             if token.is_lemma():
-                # noun / verb
-                if prev_tag in ("<NOUN>", "<VERB>", "<BASE>"):
-                    noun_verb.append(token)
+                if prev_slot >= 0:
+                    slot_counts[prev_slot] += 1
 
-                # adj / adv
-                elif prev_tag in ("<ADJ>", "<ADV>"):
-                    adj_adv.append(token)
+                    baseL = prev_slot * LARGE_EMBEDDING_SIZE
+                    for i, f in enumerate(token.large_embedding):
+                        large_slots[baseL + i] += f
 
-                # adp / pron
-                elif prev_tag in ("<ADP>", "<PRON>"):
-                    adp_pron.append(token)
+                    baseM = prev_slot * MEDIUM_EMBEDDING_SIZE
+                    for i, f in enumerate(token.medium_embedding):
+                        medium_slots[baseM + i] += f
 
-            prev_tag = token.text
+                prev_slot = -1
 
-        # Build large list with priority
-        encoded = noun_verb + adj_adv + adp_pron
-        encoded = encoded[:LARGE_LENGTH]
+            else:
+                prev_slot = TOKEN_SLOTS.get(token.text, -1)
 
-        # Pad to LARGE_LENGTH
-        if len(encoded) < LARGE_LENGTH:
-            encoded += [Token.NONE] * (LARGE_LENGTH - len(encoded))
+        # Normalize or fill with Token.NONE per slot
+        for slot in range(NR_TOKEN_SLOTS):
+            count = slot_counts[slot]
+            baseL = slot * LARGE_EMBEDDING_SIZE
+            baseM = slot * MEDIUM_EMBEDDING_SIZE
 
-        large = encoded
-        medium = encoded[:MEDIUM_LENGTH]
+            if count > 0:
+                for i in range(LARGE_EMBEDDING_SIZE):
+                    large_slots[baseL + i] /= count
+                for i in range(MEDIUM_EMBEDDING_SIZE):
+                    medium_slots[baseM + i] /= count
+            else:
+                # fill with NONE embedding
+                for i, f in enumerate(Token.NONE.large_embedding):
+                    large_slots[baseL + i] = f
+                for i, f in enumerate(Token.NONE.medium_embedding):
+                    medium_slots[baseM + i] = f
 
-        return EncodedSentence(
-            large, to_embedding(large),
-            medium, to_embedding(medium)
-        )
-
-def to_embedding(tokens: List[Token]) -> List[float]:
-    return [token.context_embedding for token in tokens]
+        return EncodedSentence(large_slots, medium_slots)

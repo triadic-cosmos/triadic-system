@@ -8,11 +8,12 @@ from .semantic import SemanticEngine
 from .config import Configuration
 from .writer_agent import WriterAgent
 from .writer_environment import WriterEnvironment
+from .sentence_encoder import SentenceEncoder
 from .multi_agent import MultiAgent
 from .curriculum import Curriculum
 from .tokens import TokenPage
 
-DATA_FOLDER: str = "../triadic-data/toy-system/"
+DATA_FOLDER: str = "../triadic-data/toy-system-v2/"
 MODEL_FILENAME: str = "_model.bin"
 TOKENS_FILENAME: str = "_tokens.txt"
 OUTPUT_FILENAME: str = "_output.txt"
@@ -22,10 +23,12 @@ class AgentBuilder:
     configuration: Configuration
     grammar: GrammarEngine = field(init=False)
     semantic: SemanticEngine = field(init=False)
+    sentence_encoder: SentenceEncoder = field(init=False)
     
     def __post_init__(self):
         self.grammar = GrammarEngine(self.configuration)
         self.semantic = SemanticEngine(self.configuration)
+        self.sentence_encoder = SentenceEncoder()
     
     def environment_path(self, environment: WriterEnvironment) -> str:
         return DATA_FOLDER + environment.configuration.name + "/"
@@ -54,20 +57,20 @@ class AgentBuilder:
         
     def build_curriculum(self, environment: WriterEnvironment, name: str) -> Curriculum:
         preprocessed_filename = self.preprocessed_filename(environment, name)
-        curriculum = Curriculum([])
+        curriculum = Curriculum()
         if Path(preprocessed_filename).is_file():
-            curriculum.read_prepocessed(preprocessed_filename, environment.grammar)
+            curriculum.read_prepocessed(preprocessed_filename, environment)
             print(f"Read preprocessed curriculum from {preprocessed_filename}.")
         else: 
             curriculum_filename = self.curriculum_filename(environment, name)
-            curriculum.read_curriculum(curriculum_filename, environment.grammar, environment.configuration)
+            curriculum.read_curriculum(curriculum_filename, environment)
             curriculum.write_curriculum(preprocessed_filename)
             print(f"Created curriculum from {curriculum_filename}.")
         print(curriculum)
         return curriculum
 
     def build_environment(self, configuration: Configuration, prefix: str) -> WriterEnvironment:
-        environment = WriterEnvironment(configuration, self.grammar, self.semantic, prefix)
+        environment = WriterEnvironment(configuration, self.grammar, self.semantic, self.sentence_encoder, prefix)
         return environment
 
     def build_single_agent(self, environment: WriterEnvironment, variance: float) -> MultiAgent:

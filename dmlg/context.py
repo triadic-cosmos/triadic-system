@@ -4,6 +4,7 @@ from typing import List
 
 from .tokens import Token
 from .sentence_encoder import EncodedSentence, EMPTY_SENTENCE
+from .narrative_memory import NarrativeMemory
 from .config import Configuration
 
 # ============================================================
@@ -22,6 +23,8 @@ class ContextWindow:
     _sentences: List[EncodedSentence] = field(init=False)
     _generator_history_embedding: List[float] = field(init = False)
     _generator_history_sentences: List[int] = field(init = False)
+    _narrative_memory: NarrativeMemory = field(init = False)
+    _narrative_memory_embedding: List[float] = field(init = False)
 
     def __post_init__(self):
         self.clear_current_sentence()
@@ -29,10 +32,12 @@ class ContextWindow:
         self._sentences = [EMPTY_SENTENCE] * self.configuration.context_max_sentences
         self._generator_history_embedding = None
         self._generator_history_sentences = self.configuration.generator_history_sentences
+        self._narrative_memory = NarrativeMemory()
+        self._narrative_memory_embedding = None
         
     def clear_current_sentence(self):
         self._position = 0
-        self._current_embedding = [Token.NONE.context_embedding] * self.configuration.content_max_lemmas
+        self._current_embedding = [Token.NONE.small_embedding] * self.configuration.content_max_lemmas
         self._last_token = Token.EOL
         self._forelast_token = Token.EOL
         self._last_lemma = Token.EOL
@@ -58,7 +63,7 @@ class ContextWindow:
         elif token.is_lemma():
             self._last_lemma = token
             if self._position <= self._last_position:
-                self._current_embedding[self._position] = token.context_embedding
+                self._current_embedding[self._position] = token.small_embedding
                 self._position += 1
            
     def add_sentence(self, sentence: EncodedSentence):
@@ -68,6 +73,10 @@ class ContextWindow:
         self._generator_history_embedding = None
         self._evaluator_history_embedding = None
         self.clear_current_sentence()
+            
+    def update_narrative_memory(self, tokens: List[Token]):
+        self._narrative_memory.update_from_sentence(tokens)
+        self._narrative_memory_embedding = None
             
     def is_filled(self):
         return self._sentences[len(self._sentences) - 1] != EMPTY_SENTENCE
@@ -91,13 +100,17 @@ class ContextWindow:
 
     def get_current_embedding(self) -> List[float]:
         cur_pos: float = self._position / self._last_position
-        return [cur_pos] + self._current_embedding + self._forelast_token.full_embedding + self._last_token.full_embedding
+        return [cur_pos] + self._current_embedding + self._forelast_token.large_embedding + self._last_token.large_embedding
     
     def get_generator_history_embedding(self) -> List[float]:
         if self._generator_history_embedding == None:
             self._generator_history_embedding = get_history_embedding(self._sentences, self._generator_history_sentences)
         return self._generator_history_embedding             
     
+    def get_narrative_memory_embedding(self) -> List[float]:
+        if self._narrative_memory_embedding == None:
+            self._narrative_memory_embedding = self._narrative_memory.get_state()
+        return self._narrative_memory_embedding
 
 def get_history_embedding(sentences: List[EncodedSentence], amounts: List[int]) -> List[float]:
     embedding = []
@@ -140,11 +153,14 @@ class InputEncoder:
         # 2. Current embedding
         current_embedding = model_input.window.get_current_embedding()
 
-        # 3. Sequence embedding
+        # 3. Narrative memory embedding
+        narrative_embedding = model_input.window.get_narrative_memory_embedding()
+
+        # 4. Sequence embedding
         sequence_embedding = model_input.sequence_embedding
 
-        # 4. Input line
+        # 5. Input line
         input_line = [model_input.line]
 
-        # 5. Concatenate
-        return history_embedding + current_embedding + sequence_embedding + input_line
+        # 6. Concatenate
+        return history_embedding + current_embedding + narrative_embedding + sequence_embedding + input_line

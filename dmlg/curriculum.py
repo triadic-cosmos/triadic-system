@@ -9,7 +9,8 @@ import re
 from .tokens import Token, TokenDictionary
 from .grammar import GrammarEngine
 from .config import Configuration
-from .sentence_encoder import SentenceEncoder, EncodedSentence
+from .writer_environment import WriterEnvironment
+from .sentence_encoder import EncodedSentence
 
 @dataclass(frozen=True)
 class CurriculumSentence:
@@ -32,9 +33,8 @@ class CurriculumStory:
 
 @dataclass(frozen=True)
 class Curriculum:
-    stories: List[CurriculumStory]
+    stories: List[CurriculumStory] = field(default_factory=list)
     token_dictionary: TokenDictionary = field(default_factory=TokenDictionary) 
-    sentence_encoder: SentenceEncoder = field(default_factory=SentenceEncoder)
 
     def get_random_story(self, rng:random.Random) -> CurriculumStory:
         return self.stories[rng.randrange(0, len(self.stories))]
@@ -43,58 +43,58 @@ class Curriculum:
     # Curriculum reader
     # ============================================================
 
-    def add_to_curriculum(self, sentences: List[str], grammar: GrammarEngine, config: Configuration):
+    def add_to_curriculum(self, sentences: List[str], environment: WriterEnvironment):
         combined: str = " ".join(sentences)
         split = re.split("<SPLIT>", combined)
         
         curriculum_sentences = []
         i = 1
         for s in split:
-            if len(s) < config.min_sentence_length:
+            if len(s) < environment.configuration.min_sentence_length:
                 continue
             if not s.endswith("<PERIOD>") and not s.endswith("<EXCLAMATION>") and not s.endswith("<QUESTION>"):
                 continue         
             eol = s.replace("<COMMA> <PERIOD>", "<PERIOD>") + " <EOL>"
             tokens = [self.token_dictionary.add_and_get(t) for t in eol.split(" ") if t != ""]
-            encoded = self.sentence_encoder.encode_sentence(tokens)
-            natural = grammar.convert_from_canonical(eol)
+            encoded = environment.sentence_encoder.encode_sentence(tokens)
+            natural = environment.grammar.convert_from_canonical(eol)
             curriculum_sentences.append(CurriculumSentence(tokens, encoded, natural))
             print(f"{i}. {natural}")
             i += 1
 
-        if len(curriculum_sentences) < config.min_story_lines:
+        if len(curriculum_sentences) < environment.configuration.min_story_lines:
             return
         
         self.stories.append(CurriculumStory(curriculum_sentences))
-        
-    def read_curriculum(self, filename: str, grammar: GrammarEngine, config: Configuration):
+
+    def read_curriculum(self, filename: str, environment: WriterEnvironment):
         with open(filename, "r", encoding="utf-8") as f:
             lines = f.read().splitlines()
-            
+
         sentences = []
 
         for line in lines:
             line = preprocess_line(line)
             if len(line) < 5:
-                self.add_to_curriculum(sentences, grammar, config)
+                self.add_to_curriculum(sentences, environment)
                 sentences = []
-                if len(self.stories) >= config.max_stories:
+                if len(self.stories) >= environment.configuration.max_stories:
                     break
                 continue
                 
-            doc = grammar.nlp(line)
+            doc = environment.grammar.nlp(line)
             
             for sent in doc.sents:
                 source = sent.text
-                canonical = grammar.convert_to_canonical(source)
-                natural = grammar.convert_from_canonical(canonical)
-                if config.no_roundtrip or line.lower().startswith(natural.lower()):
+                canonical = environment.grammar.convert_to_canonical(source)
+                natural = environment.grammar.convert_from_canonical(canonical)
+                if environment.configuration.no_roundtrip or line.lower().startswith(natural.lower()):
                     sentences.append(canonical)
                 else:
                     print(f"ROUNDTRIP {sent} -> {natural} <- {canonical}")
 
                         
-        self.add_to_curriculum(sentences, grammar, config)                       
+        self.add_to_curriculum(sentences, environment)                       
         
         print(f"curriculum stories = {len(self.stories)}")
 
@@ -105,7 +105,7 @@ class Curriculum:
                     file.write(sentence.get_canonical() + "\n")
                 file.write("\n")
 
-    def read_prepocessed(self, filename:str, grammar: GrammarEngine):
+    def read_prepocessed(self, filename:str, environment: WriterEnvironment):
         with open(filename, "r", encoding="utf-8") as f:
             lines = f.read().splitlines()
             sentences = []
@@ -116,9 +116,9 @@ class Curriculum:
                         self.stories.append(CurriculumStory(sentences))
                     sentences = []
                 else:                    
-                    natural = grammar.convert_from_canonical(line)
+                    natural = environment.grammar.convert_from_canonical(line)
                     tokens = [self.token_dictionary.add_and_get(token) for token in line.split(" ") if token != ""]
-                    encoded = self.sentence_encoder.encode_sentence(tokens)
+                    encoded = environment.sentence_encoder.encode_sentence(tokens)
                     sentences.append(CurriculumSentence(tokens, encoded, natural))
                     
             if (len(sentences) > 0):                

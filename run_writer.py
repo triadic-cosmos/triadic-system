@@ -3,12 +3,6 @@ from engine.triadic_writer import TriadicWriter
 
 import time
 
-AESOP_KEYWORDS = {
-    "fox", "crow", "wolf", "goat", "lion", "mouse",
-    "bone", "cliff", "field", "shadow", "water", "stone",
-    "watch", "wait", "listen", "carry", "warn", "trade"
-}
-
 HYDE_KEYWORDS = {
     "spirit", "hell", "rage", "glee", "body", "blow", "terror", "mist",
     "life", "scene", "excess", "lust", "evil", "gratitude", "remorse",
@@ -19,53 +13,34 @@ HYDE_KEYWORDS = {
     "humility", "restrictions", "life", "door", "key"
 }
 
-OBSERVATORY_KEYWORDS = {
-    "observatory", "machine", "ridge", "wind", "dust", "information",
-    "caretaker", "dome", "wheel", "panel", "sky", "document",
-    "instrument", "schedule", "ledger", "sequence", "lens",
-    "horizon", "interval", "vibration", "valley", "mist", "pattern",
-    "night", "star", "degree", "instruction", "brightness",
-    "shadow", "object", "sunrise", "state", "stillness",
-    "measurement", "experiment", "day"
+TIME_KEYWORDS = {
+    "machine", "diagram", "engine", "smoke", "hillside",
+    "structure", "gallery", "tremor", "observe", "rise"
 }
 
-POET_KEYWORDS = {"girl", "meadow", "kitten", "rabbit", "echo", "lantern", "hummingbird"}
-
-FOREST_KEYWORDS = {"fox", "rabbit", "raccoon"}
-
-AESOP_PROMPT = [
-    "In a quiet field a fox watched a careless crow holding a prize.",
-    "A hungry wolf approached a timid goat standing near the edge of a cliff.",
-    "The mouse paused when the lion stirred inside the dim cave.",
-    "A proud rooster boasted loudly while the farmyard listened in silence.",
-    "A clever crow studied the water jar under the heat of the day.",
-    "A restless dog guarded a bone while shadows moved around him.",
-    "The tortoise walked steadily as the hare laughed at his slow pace.",
-    "A thirsty stag lowered his head to the pool and admired his reflection.",
-    "A small ant carried a heavy crumb while the grasshopper played nearby.",
-    "A young shepherd shouted warnings that no one believed anymore.",
-    "A greedy dog saw another dog in the river holding the same treasure.",
-    "A traveling merchant listened to the advice of a wise old donkey."
-]
-
-OBSERVATORY_PROMPT = ["The observatory stood alone on the ridge."]
-FOREST_PROMPT = ["Violent storm tears across hollow forest!"]
 HYDE_PROMPT = ["Instantly the spirit of hell awoke in me and raged."]
-POET_PROMPT = "The table, the dust, the breath between syllables."
 
+TIME_PROMPT = [
+    "A faint mechanical tremor passed through the deserted gallery as the machine waited in the pale haze",
+    "He stepped into the dim corridor where ancient diagrams hinted at forgotten futures",
+    "The air shimmered with a strange metallic warmth rising from the fractured engine pit",
+    "Across the silent hillside the last traces of smoke drifted over abandoned structures",
+    "In the trembling light he sensed a presence watching from the edge of the ruined chamber"
+]
+    
 # Generation main using keywords, prompt and beam search
 start = time.perf_counter()
 
 print("Generating stories...")
 
-model = "mix"
-prefix = "gen"
-number_lines = 20
+model = "dorian"
+prefix = "15k"
+number_lines = 111
 number_stories = 20
 variance = 0.3
-beam_search = True
+beam_search = False
 
 writer: TriadicWriter = TriadicWriter(model, prefix, number_lines, variance)
-writer.write(number_stories, POET_PROMPT, POET_KEYWORDS, beam_search)
+writer.write(number_stories, None, None, beam_search)
 
 print(f"Time: {time.perf_counter() - start:.1f} s")

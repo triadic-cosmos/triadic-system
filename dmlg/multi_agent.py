@@ -8,7 +8,6 @@ from .tokens import Token, TokenLogit
 from .context import ContextWindow, ModelInput
 from .writer_environment import WriterEnvironment
 from .writer_agent import WriterAgent, WriterStory, WriterSentence
-from .sentence_encoder import SentenceEncoder
 
 @dataclass
 class MultiAgent:
@@ -16,11 +15,10 @@ class MultiAgent:
     agents: List[WriterAgent]
     weights: List[int]
     variance: float
-    sentence_encoder: SentenceEncoder = field(init=False)
     rng: random.Random = field(init=False)
 
     def __post_init__(self):
-        self.sentence_encoder = SentenceEncoder()
+        self.sentence_encoder = self.environment.sentence_encoder
         self.rng = random.Random()
         self.beam_width = self.environment.configuration.nr_of_beams
         self.max_beam_width = self.environment.configuration.max_beams
@@ -219,6 +217,7 @@ class MultiAgent:
                         sentences.append(fixed)
                         encoded = self.sentence_encoder.encode_sentence(sentence)
                         ctx.add_sentence(encoded)
+                        ctx.update_narrative_memory(sentence)
                         return fixed
     
     def write_story(self, prefix: str, ctx: ContextWindow, prompt: str = None, keywords: Set[str] = None, beam_search: bool = False) -> WriterStory:
@@ -235,6 +234,7 @@ class MultiAgent:
                     tokens = self.environment.grammar.convert_to_canonical_tokens(prompt_line)
                     encoded = self.sentence_encoder.encode_sentence(tokens)
                     ctx.add_sentence(encoded)
+                    ctx.update_narrative_memory(tokens)
                 if ctx.is_filled():
                     break
             
@@ -273,6 +273,7 @@ class MultiAgent:
                     writer_sentences.append(WriterSentence(sentence, natural, line))
                     encoded = self.sentence_encoder.encode_sentence(sentence)
                     ctx.add_sentence(encoded)
+                    ctx.update_narrative_memory(sentence)
                     index += 1
                     if index == lines:
                         break

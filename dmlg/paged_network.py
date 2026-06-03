@@ -9,12 +9,11 @@ import math
 from .config import Configuration
 from .tokens import Token, TokenPage, TokenMapping, TokenLogit
 from .context import ModelInput, InputEncoder
-from .neural import NeuralNetwork
+from .neural import NeuralNetwork, ActivationMLP
 from .transition_map import TransitionMap
 from .rule_based import RuleBasedFilter
 
 rule_based = RuleBasedFilter()
-override_warning = True
 
 @dataclass
 class TrainingSample:
@@ -29,16 +28,10 @@ class TrainingBatch:
 @dataclass
 class PredictionNetwork:
     page: TokenPage
-    input_size: int
-    hidden_size: int
-    activation_hidden_size: int
+    network: NeuralNetwork
     encoder: InputEncoder
     configuration: Configuration
-    network: NeuralNetwork = field(init=False)
-
-    def __post_init__(self):
-        self.network = NeuralNetwork(self.input_size, self.hidden_size, self.activation_hidden_size, self.page.output_size())
-
+    
     def expand(self):
         self.network = self.network.add_output_channel()
 
@@ -119,6 +112,7 @@ class PredictionNetwork:
 class PagedNetwork:
     configuration: Configuration
     transition_map: TransitionMap
+    activation_mlp: ActivationMLP
     page_list: list = field(default_factory=list)
     pages: dict = field(default_factory=dict)
     nets: dict = field(default_factory=dict)
@@ -126,7 +120,7 @@ class PagedNetwork:
 
     def __post_init__(self):
         self.rng = random.Random()
-
+        
     def _new_page(self, prev: str, target: Token) -> TokenPage:
         page = TokenPage(uuid4(), {prev}, [target])
         self.page_list.append(page)
@@ -136,11 +130,14 @@ class PagedNetwork:
 
     def _create_default_network(self, page: TokenPage) -> PredictionNetwork:
         encoder: InputEncoder = InputEncoder()
+        neural: NeuralNetwork = NeuralNetwork(
+            self.configuration.generator_input_size(),
+            self.configuration.hidden_size,
+            page.output_size(),
+            self.activation_mlp)
         network: PredictionNetwork = PredictionNetwork(
             page,
-            self.configuration.generator_input_size(),
-            self.configuration.hidden_size, # default hidden size
-            0, # no learned activations by default
+            neural,
             encoder,
             Configuration)
         self.nets[page.uuid] = network
@@ -150,24 +147,20 @@ class PagedNetwork:
         input_size = page.input_size()
         output_size = page.output_size()
         hidden_size = suggest_hidden_size(input_size, output_size)
-        activation_size = power_suggest_activation_hidden_size(input_size, output_size)
+
         if input_size + output_size >= 100:
-            print(f"{input_size} -> {output_size} : {hidden_size} {activation_size}")
-        if self.configuration.activation_hidden_size > 0:
-            # override calculated activation hidden size
-            activation_size = self.configuration.activation_hidden_size
-            global override_warning
-            if override_warning:
-                print(f"Activation hidden size is fixed to {activation_size}!")
-                override_warning = False
+            print(f"{input_size} -> {output_size} : {hidden_size}")
 
         # create optimized network
         encoder: InputEncoder = InputEncoder()
-        network: PredictionNetwork = PredictionNetwork(
-            page,
+        neural: NeuralNetwork = NeuralNetwork(
             self.configuration.generator_input_size(),
             hidden_size,
-            activation_size,
+            output_size,
+            self.activation_mlp)
+        network: PredictionNetwork = PredictionNetwork(
+            page,
+            neural,
             encoder,
             Configuration)
         self.nets[page.uuid] = network
@@ -281,17 +274,3 @@ def suggest_hidden_size(n_in, n_out, h_min=4, h_max=96):
 
     # clamp to min/max
     return max(h_min, min(h, h_max))
-
-def threshold_suggest_activation_hidden_size(n_in, n_out):
-    C = n_in * n_out
-    if C < 100: return 0  # no activation network
-    if C < 1000: return 4
-    if C < 10000: return 6
-    return 8
-
-def power_suggest_activation_hidden_size(n_in, n_out):
-    C = n_in * n_out
-    alpha = 0.28
-    k = 1.8
-    h = k * (C ** alpha)
-    return max(4, min(128, int(h)))

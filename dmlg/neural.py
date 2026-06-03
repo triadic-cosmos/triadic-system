@@ -39,22 +39,18 @@ class AMLPActivation(nn.Module):
 
 # Main MLP
 class NeuralNetwork(nn.Module):
-    def __init__(self, input_size, hidden_size, activation_size, output_size):
+    def __init__(self, input_size, hidden_size, output_size, activation):
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.activation_size = activation_size
         self.output_size = output_size
 
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, output_size)
-
-        if activation_size > 0:
-            self.act_mlp = ActivationMLP(activation_size)
-            self.act = AMLPActivation(self.act_mlp)
-        else:
-            self.act = F.silu # use fixed activation function
+        
+        self.activation: ActivationMLP = activation
+        self.act = AMLPActivation(activation)
 
     def forward(self, x):
         h = self.act(self.fc1(x))
@@ -62,7 +58,7 @@ class NeuralNetwork(nn.Module):
         return self.fc3(h)
 
     def add_output_channel(self):
-        new = NeuralNetwork(self.input_size, self.hidden_size, self.activation_size, self.output_size + 1)
+        new = NeuralNetwork(self.input_size, self.hidden_size, self.output_size + 1, self.activation)
         with torch.no_grad():
             new.fc1.weight.copy_(self.fc1.weight)
             new.fc1.bias.copy_(self.fc1.bias)

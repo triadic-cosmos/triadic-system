@@ -10,7 +10,9 @@ import random
 # Token
 # ============================================================
 
-FULL_EMBEDDING_SIZE = 4
+MEMORY_EMBEDDING_SIZE = 32
+LARGE_EMBEDDING_SIZE = 4
+MEDIUM_EMBEDDING_SIZE = 2
 
 
 class Token:
@@ -18,18 +20,21 @@ class Token:
     Deterministic token with:
     - text
     - deterministic ID
-    - deterministic context embedding (scalar)
-    - deterministic full embedding (16-dim normalized)
+    - deterministic large embedding
+    - deterministic medium embedding
     """
 
-    EOL = None  # initialized after class definition
+    # initialized after class definition
+    EOL = None  
     NONE = None
 
     def __init__(self, text: str):
         self._text = text
         self._id = self._compute_id(text)
-        self._context_embedding = self._compute_context_embedding(self._id)
-        self._full_embedding = self._compute_full_embedding(self._id, FULL_EMBEDDING_SIZE)
+        self._memory_embedding = self._compute_embedding(self._id, MEMORY_EMBEDDING_SIZE)
+        self._large_embedding = self._compute_embedding(self._id, LARGE_EMBEDDING_SIZE)
+        self._medium_embedding = self._compute_embedding(self._id, MEDIUM_EMBEDDING_SIZE)
+        self._small_embedding = self._compute_small_embedding(self._id)
 
     def is_eol(self) -> bool:
         return self._text == "<EOL>"
@@ -48,12 +53,20 @@ class Token:
         return self._id
 
     @property
-    def context_embedding(self) -> float:
-        return self._context_embedding
+    def memory_embedding(self) -> List[float]:
+        return self._memory_embedding
 
     @property
-    def full_embedding(self) -> List[float]:
-        return self._full_embedding
+    def large_embedding(self) -> List[float]:
+        return self._large_embedding
+
+    @property
+    def medium_embedding(self) -> List[float]:
+        return self._medium_embedding
+
+    @property
+    def small_embedding(self) -> List[float]:
+        return self._small_embedding
 
     @staticmethod
     def _compute_id(text: str) -> int:
@@ -63,12 +76,12 @@ class Token:
         return id_
 
     @staticmethod
-    def _compute_context_embedding(id_: int) -> float:
+    def _compute_small_embedding(id_: int) -> float:
         rng = random.Random((id_ * id_) * 123)
         return rng.gauss(0.0, 1.0)
 
     @staticmethod
-    def _compute_full_embedding(id_: int, length: int) -> List[float]:
+    def _compute_embedding(id_: int, length: int) -> List[float]:
         rng = random.Random((id_ * id_) * 321)
         emb = [rng.gauss(0.0, 1.0) for _ in range(length)]
         norm = math.sqrt(sum(x * x for x in emb))
@@ -88,7 +101,7 @@ class Token:
 
 # Initialize static EOL token
 Token.EOL = Token("<EOL>")
-Token.NONE = Token("none")
+Token.NONE = Token("<NONE>")
 
 
 # ============================================================
