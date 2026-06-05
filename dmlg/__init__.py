@@ -54,7 +54,10 @@ from .writer_environment import WriterEnvironment
 # --- Multi-Agent System ---------------------------------------------------
 
 from .multi_agent import MultiAgent
-from .agent_builder import AgentBuilder
+from .agent_builder import (
+    AgentBuilder,
+    DATA_FOLDER
+)
 
 # --- Curriculum -----------------------------------------------------------
 
@@ -83,6 +86,10 @@ from .rule_based import RuleBasedFilter
 # --- Moderation Agent -----------------------------------------------------
 
 from .moderated_agent import ModeratedAgent, ModeratedSentence
+
+# --- Mapping Agent --------------------------------------------------------
+
+from .mapping_agent import MappingAgent
 
 # --- Public API -----------------------------------------------------------
 
