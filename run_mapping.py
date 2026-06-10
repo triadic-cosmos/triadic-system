@@ -11,7 +11,7 @@ from dmlg import (
 )
 
 # Create mapping agent
-configuration: Configuration = Configuration("time")
+configuration: Configuration = Configuration("hyde-mistral")
 builder: AgentBuilder = AgentBuilder(configuration)
 environment: WriterEnvironment = builder.build_environment(configuration, "15k")
 writer_agent: WriterAgent = builder.load_or_create_agent(environment)
@@ -19,7 +19,7 @@ mapping_agent: MappingAgent = MappingAgent(environment, writer_agent)
 
 # Map input file
 start = time.perf_counter()
-name = "hyde"
+name = "hyde-mistral"
 book = "book.txt"
 input_filename = DATA_FOLDER + f"{name}/{book}"
 output_filename = DATA_FOLDER + f"{name}/{configuration.name}_{book}"

@@ -9,8 +9,8 @@ from dmlg import (
 )
 
 # Distillation main
-model = "dorian"
-prefix = "15k"
+model = "observatory"
+prefix = "1k"
 
 configuration: Configuration = Configuration(model)
 

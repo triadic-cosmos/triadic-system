@@ -18,11 +18,11 @@ class TriadicWriter:
     variance: float
     
     def __post_init__(self):
-        configuration: Configuration = Configuration(self.name)
-        configuration.story_lines = self.num_lines
-        self.builder = AgentBuilder(configuration)
-        environment: WriterEnvironment = self.builder.build_environment(configuration, self.prefix)
-        self.agent: MultiAgent = self.builder.build_single_agent(environment, self.variance)
+        self.configuration: Configuration = Configuration(self.name)
+        self.configuration.story_lines = self.num_lines
+        self.builder = AgentBuilder(self.configuration)
+        self.environment: WriterEnvironment = self.builder.build_environment(self.configuration, self.prefix)
+        self.agent: MultiAgent = self.builder.build_single_agent(self.environment, self.variance)
         
     def write(self, amount: int, prompt: List[str] = None, keywords: set[str] = None, beam_search: bool = False):
         print("Generating output...")

@@ -3,8 +3,8 @@ from engine.triadic_trainer import TriadicTrainer
 import time
 
 # Training a dataset model with epoch variants
-model = "dorian"
-variants = [5, 10, 15, 20]
+model = "observatory"
+variants = [1]
 trainer: TriadicTrainer = TriadicTrainer()
 
 for variant in variants:
