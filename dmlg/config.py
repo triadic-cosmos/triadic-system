@@ -15,7 +15,7 @@ class Configuration:
     content_max_lemmas = 30
     # curriculum
     no_roundtrip: bool = True
-    max_stories: int = 2000
+    max_stories: int = 5000
     min_story_lines: int = 3
     min_sentence_length: int = 10
     epochs_step: int = 10
@@ -31,8 +31,8 @@ class Configuration:
     score_upper_margin: float = 0.001
     score_lower_margin: float = 0.3
     token_retries: int = 5
-    nr_of_beams: int = 5
-    max_beams: int = 10
+    nr_of_beams: int = 3
+    max_beams: int = 5
     mark_sentence: bool = False
 
     def generator_history_context_size(self) -> int:

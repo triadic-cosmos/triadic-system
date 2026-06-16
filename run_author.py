@@ -5,11 +5,11 @@ from engine.triadic_llm import TriadicLLM
 
 import time
 
-CHAPTERS = 20
+CHAPTERS = 10
 LINES = 20
 VARIANCE = 0.3
-MODELS = ["observatory"]
-PREFIX = ["1k"]
+MODELS = ["comedy"]
+PREFIX = ["second"]
 HYDE_TIME_TITLE = "Dr. Jekyll and Mr. Hyde Meet The Time Machine"
 DORIAN_TIME_TILE = "Dorian Gray meets The Time Machine"
 DORIAN_HYDE_TITLE = "Dorian Gray meets Dr. Jekyll and Mr. Hyde"
@@ -17,7 +17,8 @@ HYDE_INTRO_FOREST_TITLE = "Dr. Jekyll in the Horror Forest thinking about Langua
 INTRO_TITLE = "Introduction to Dynamic Modular Language Graphs"
 DORIAN_TITLE = "Picturing Dorian Gray"
 OBSERVATORY_TITLE = "The Observatory on the Ridge"
-FILENAME = "../triadic-data/toy-system-v2/author/observatory_book.txt"
+COMEDY_TITLE = "The Fox and the Rabbit"
+FILENAME = "../triadic-data/toy-system-v2/author/second_book.txt"
 
 # Create author
 llm = TriadicLLM()
@@ -29,5 +30,5 @@ author: TriadicAuthor = TriadicAuthor(llm, writers)
 
 # Write book
 start = time.perf_counter()
-author.write_book(FILENAME, OBSERVATORY_TITLE, CHAPTERS, LINES)
+author.write_book(FILENAME, COMEDY_TITLE, CHAPTERS, LINES)
 print(f"Time: {time.perf_counter() - start:.1f} s")

@@ -12,16 +12,21 @@ from dmlg import (
 # https://huggingface.co/unsloth/mistral-7b-instruct-v0.3-bnb-4bit
 MODEL_PATH = "../../mistral/"
 
-PROMPT = "Fix the following short story grammatically and semantically. " + \
-    "Make it narratively coherent. Stay close to the original content. " + \
-    "Avoid any duplication. End the story with a line containing: The End. " + \
-    "This is the story: "
-TITLE_PROMPT = "Create a nice chapter title for the following book chapter. " + \
-    "Start with 'Chapter: ' followed by the chapter title. " + \
-    "Stop after that. This is the chapter: "
 TEMPERATURE = 0.9
 TOP_P = 0.9
 END_MARKER = "the end"
+
+TITLE_PROMPT = \
+    "Create a nice chapter title for the following book chapter. " + \
+    "Start with 'Chapter: ' followed by the chapter title. " + \
+    "Stop after that. This is the chapter: "
+SCORE_PROMPT = \
+    "Give a score between 0 and 100 for the following chapter and title. " + \
+    "Evaluate using the following criteria: " + \
+    "coherence, readability, originality, creativity, " + \
+    "style, humor, narrative progression, suitability as a chapter in a real book." + \
+    "Do not explain the score. Write the result as: Score: <number> and stop after that. " + \
+    "The chapter title is: $TITLE\nThe chapter text is: $STORY"
 
 @dataclass
 class TriadicLLM:
@@ -56,9 +61,23 @@ class TriadicLLM:
             
         # Fallback title
         return "Untitled"       
-                
-    def moderate(self, prefix: str, story: WriterStory, max_tokens: int) -> List[str]:
-        prompt = PROMPT + story.get_story()
+
+    def validate(self, validate_prompt: str, story: str, max_tokens: int) -> bool:
+        prompt = validate_prompt + story
+        answer = self.generate(prompt, max_tokens)
+        print(answer)
+        for line in answer.split("\n"):
+            lower_line = line.lower()
+            if "my validation is: yes!" in lower_line:
+                print("Validated!")
+                return True
+            if "my validation is: no!" in lower_line:
+                print("Rejected!")
+                return False
+        return False
+
+    def moderate(self, fix_prompt: str, prefix: str, story: WriterStory, max_tokens: int) -> List[str]:
+        prompt = fix_prompt + story.get_story()
         answer = self.generate(prompt, max_tokens)
         print(answer)
         filtered = []
@@ -86,6 +105,22 @@ class TriadicLLM:
             
         print(f"{prefix}. {' '.join(filtered)}") 
         return filtered
+    
+    def score(self, lines: List[str], title: str, max_tokens: int) -> int:
+        prompt = SCORE_PROMPT.replace("$TITLE", title).replace("$STORY", " ".join(lines))
+        answer = self.generate(prompt, max_tokens)
+        print(answer)
+        for line in answer.split("\n"):
+            score = parse_score(line)
+            if score:
+                return score
+        return 0
 
 def clean_line(line:str) -> str:
     return line.lstrip().rstrip().replace("Dr.", "Dr").replace("Mr.", "Mr")
+
+def parse_score(text: str):
+    match = re.search(r"Score:\s*(\d+)", text)
+    if match:
+        return int(match.group(1))
+    return None

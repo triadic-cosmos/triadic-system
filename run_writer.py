@@ -27,14 +27,14 @@ TIME_PROMPT = [
     "Across the silent hillside the last traces of smoke drifted over abandoned structures",
     "In the trembling light he sensed a presence watching from the edge of the ruined chamber"
 ]
-    
+ 
 # Generation main using keywords, prompt and beam search
 start = time.perf_counter()
 
 print("Generating stories...")
 
-model = "observatory"
-prefix = "1k"
+model = "honeymoon"
+prefix = "20k"
 number_lines = 111
 number_stories = 20
 variance = 0.3

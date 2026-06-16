@@ -43,7 +43,7 @@ class Curriculum:
     # Curriculum reader
     # ============================================================
 
-    def add_to_curriculum(self, sentences: List[str], environment: WriterEnvironment):
+    def add_to_curriculum(self, sentences: List[str], environment: WriterEnvironment) -> CurriculumStory:
         combined: str = " ".join(sentences)
         split = re.split("<SPLIT>", combined)
         
@@ -65,7 +65,9 @@ class Curriculum:
         if len(curriculum_sentences) < environment.configuration.min_story_lines:
             return
         
-        self.stories.append(CurriculumStory(curriculum_sentences))
+        story = CurriculumStory(curriculum_sentences)
+        self.stories.append(story)
+        return story
 
     def read_curriculum(self, filename: str, environment: WriterEnvironment):
         with open(filename, "r", encoding="utf-8") as f:
@@ -103,6 +105,13 @@ class Curriculum:
             for story in self.stories:
                 for sentence in story.sentences:
                     file.write(sentence.get_canonical() + "\n")
+                file.write("\n")
+
+    def write_curriculum_natural(self, filename: str):
+        with open(filename, "w", encoding='utf-8-sig') as file:
+            for story in self.stories:
+                for sentence in story.sentences:
+                    file.write(sentence.natural + "\n")
                 file.write("\n")
 
     def read_prepocessed(self, filename:str, environment: WriterEnvironment):

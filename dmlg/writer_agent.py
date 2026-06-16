@@ -56,12 +56,15 @@ class WriterAgent:
         self.keyword_count = dict()
 
     def __str__(self):
-        return f"[{self.id}] trainings = {self.training_count}, pages = {self.paged_network.token_pages}"
+        return f"[{self.id}] trainings = {self.training_count}, pages = {len(self.paged_network.page_list)}"
         
     # ------------------------------------------------------------
     # Learning and curriculum training
     # ------------------------------------------------------------
-        
+
+    def page_transition_ratio(self) -> float:
+        return self.training_count / len(self.paged_network.page_list)
+
     def train_curriculum(self, curriculum: Curriculum, epochs: int, explore: bool):
         batch = TrainingBatch()
         # Reuse context for all epochs
@@ -114,6 +117,13 @@ class WriterAgent:
     # ------------------------------------------------------------
     # Curriculum story indexing
     # ------------------------------------------------------------
+
+    def filter_keywords(self, keywords: set[str]) -> set[str]:
+        filtered = set()
+        for k in keywords:
+            if k in self.keyword_map:
+                filtered.add(k)
+        return filtered
 
     def build_index_from_curriculum(self, curriculum: Curriculum):
         km = defaultdict(set) 

@@ -17,6 +17,11 @@ MAX_TOKENS = 2000
 MIN_LINES = 4
 MAX_TRIES = 3
 
+FIX_PROMPT = "Fix the following short story grammatically and semantically. " + \
+    "Make it narratively coherent. Stay close to the original content. " + \
+    "Avoid any duplication. End the story with a line containing: The End. " + \
+    "This is the story: "
+
 # Authoring engine
 @dataclass
 class TriadicAuthor:
@@ -39,7 +44,7 @@ class TriadicAuthor:
             for chapter in range(1, chapters + 1):
                 story: WriterStory = self.multi_agent.write_story(f"CHAPTER-{chapter}", ctx, None, None, False)
                 for try_nr in range(1, MAX_TRIES + 1):               
-                    moderated: List[str] = self.llm.moderate(f"LLM-{chapter}",story, MAX_TOKENS)
+                    moderated: List[str] = self.llm.moderate(FIX_PROMPT, f"LLM-{chapter}",story, MAX_TOKENS)
                     if len(moderated) < MIN_LINES:
                         continue
                     chapter_title = self.llm.generate_title(moderated, MAX_TOKENS)

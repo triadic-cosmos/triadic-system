@@ -16,8 +16,8 @@ from dmlg import (
 
 DATA_FOLDER = "../triadic-data/toy-system-v2/"
 MODEL_FILENAME = "_model.bin"
-MODEL_PREFIXES = ["5k", "10k", "15k", "20k"]
-MODEL_NAME = "dorian"
+MODEL_PREFIXES = ["first", "second", "third", "fourth"]
+MODEL_NAME = "comedy"
 
 def load_agent(name:str, prefix: str) -> WriterAgent:
     return WriterAgent.load(environment, DATA_FOLDER + name + "/" + prefix + MODEL_FILENAME)  
