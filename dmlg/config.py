@@ -27,9 +27,9 @@ class Configuration:
     max_words: int = 25
     max_tokens: int = 60
     story_lines: int = 20
-    max_attempts: int = 10000
+    max_attempts: int = 20000
     score_upper_margin: float = 0.001
-    score_lower_margin: float = 0.3
+    score_lower_margin: float = 0.5
     token_retries: int = 5
     nr_of_beams: int = 3
     max_beams: int = 5

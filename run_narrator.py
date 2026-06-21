@@ -10,9 +10,9 @@ import time
 VARIANCE = 0.3
 EPOCHS = 15000
 STORIES = 100
-MIN_CHAPTERS = 15
-MAX_CHAPTERS = 25
-RETRIES = 2
+MIN_CHAPTERS = 5
+MAX_CHAPTERS = 10
+RETRIES = 3
 
 # Comedy distillation prompt
 COMEDY_PROMPT = \
@@ -191,6 +191,21 @@ HONEYMOON_PARAMS = TriadicNarratorParams(
     85
 )
 
+# Dynamic book parameters
+DYNAMIC_PARAMS = TriadicNarratorParams(
+    "comedy",
+    "Reject if this story has very little variation.",
+    "Combine this into a dark forest slapstick comedy horror story. Polish the semantics where needed.",
+    "Link the two sequences maintaining the dark forest slapstick comedy horror theme. Be creative if necessary.",
+    "This is a dark forest slapstick comedy horror story book.",
+    "dynamic5",
+    ["15k"],
+    [],
+    [],
+    {},
+    80
+)
+
 # Create writer
 def create_writer(name: str, prefix: str) -> TriadicWriter:    
     return TriadicWriter(name, prefix, 20, VARIANCE)
@@ -229,5 +244,5 @@ def write_sequential_book(params: TriadicNarratorParams, min_chapters: int, max_
 
 # Main
 start = time.perf_counter()
-write_sequential_book(HONEYMOON_PARAMS, MIN_CHAPTERS, MAX_CHAPTERS, RETRIES)
+write_book(DYNAMIC_PARAMS, MIN_CHAPTERS, RETRIES)
 print(f"Elapsed time : {time.perf_counter() - start:.1f} s")

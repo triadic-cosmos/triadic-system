@@ -44,16 +44,16 @@ class TriadicLLM:
             top_p=TOP_P)        
         return self.tokenizer.decode(output[0], skip_special_tokens=True)
 
-    def generate_title(self, lines: List[str], max_tokens: int) -> str:
+    def generate_title(self, lines: List[str], max_tokens: int, title_prompt: str = TITLE_PROMPT) -> str:
         # Try with all lines
-        prompt = TITLE_PROMPT + " ".join(lines)
+        prompt = title_prompt + " ".join(lines)
         answer = self.generate(prompt, max_tokens)
         for line in answer.split("\n"):
             if line.startswith("Chapter:"):
                 return line.replace("Chapter:", "").lstrip().rstrip()
         
         # Try with only first line
-        prompt = TITLE_PROMPT + lines[0]
+        prompt = title_prompt + lines[0]
         answer = self.generate(prompt, max_tokens)
         for line in answer.split("\n"):
             if line.startswith("Chapter:"):
@@ -106,8 +106,8 @@ class TriadicLLM:
         print(f"{prefix}. {' '.join(filtered)}") 
         return filtered
     
-    def score(self, lines: List[str], title: str, max_tokens: int) -> int:
-        prompt = SCORE_PROMPT.replace("$TITLE", title).replace("$STORY", " ".join(lines))
+    def score(self, lines: List[str], title: str, max_tokens: int, score_prompt: str = SCORE_PROMPT) -> int:
+        prompt = score_prompt.replace("$TITLE", title).replace("$STORY", " ".join(lines))
         answer = self.generate(prompt, max_tokens)
         print(answer)
         for line in answer.split("\n"):

@@ -62,8 +62,11 @@ class WriterAgent:
     # Learning and curriculum training
     # ------------------------------------------------------------
 
+    def nr_of_pages(self) -> int:
+        return len(self.paged_network.page_list)
+
     def page_transition_ratio(self) -> float:
-        return self.training_count / len(self.paged_network.page_list)
+        return self.training_count / self.nr_of_pages()
 
     def train_curriculum(self, curriculum: Curriculum, epochs: int, explore: bool):
         batch = TrainingBatch()

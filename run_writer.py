@@ -33,12 +33,12 @@ start = time.perf_counter()
 
 print("Generating stories...")
 
-model = "honeymoon"
-prefix = "20k"
-number_lines = 111
+model = "dynamic4"
+prefix = "15k"
+number_lines = 20
 number_stories = 20
-variance = 0.3
-beam_search = True
+variance = 0.5
+beam_search = False
 
 writer: TriadicWriter = TriadicWriter(model, prefix, number_lines, variance)
 writer.write(number_stories, None, None, beam_search)
