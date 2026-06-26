@@ -8,8 +8,10 @@ from dmlg import (
     WriterStory
 )
 
-# Model used for testing :
+# Tested models that can produce results :
 # https://huggingface.co/unsloth/mistral-7b-instruct-v0.3-bnb-4bit
+# https://huggingface.co/unsloth/mistral-7b-instruct-v0.2-bnb-4bit
+# https://huggingface.co/Qwen/Qwen2.5-3B-Instruct
 MODEL_PATH = "../../mistral/"
 
 TEMPERATURE = 0.9
