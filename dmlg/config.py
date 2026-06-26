@@ -1,39 +1,50 @@
 # config.py
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
+
+from .tokens import TokenCodeBook
 
 @dataclass
 class Configuration:
     name: str
-    # model
-    hidden_size: int = 8
+    # model parameters
+    hidden_size: int = 32
     activation_hidden_size: int = 32
-    max_page_inputs: int = 64
+    output_dimension: int = 32
+    total_pages: int = 300
     # context
     generator_history_sentences = [5, 15]
     context_max_sentences = 80
     content_max_lemmas = 30
     # curriculum
     no_roundtrip: bool = True
-    max_stories: int = 5000
+    max_stories: int = 1000
     min_story_lines: int = 3
     min_sentence_length: int = 10
-    epochs_step: int = 10
     # needed epochs depend on dataset size
-    explorer_training_epochs: int = 2000 
-    generator_training_epochs: int = 1000 
+    warmup_epochs: int = 1
+    random_epochs: int = 1000
+    epochs_step: int = 10    
     # generation
-    min_words: int = 5
+    min_words: int = 6
     max_words: int = 25
     max_tokens: int = 60
     story_lines: int = 20
     max_attempts: int = 20000
-    score_upper_margin: float = 0.001
-    score_lower_margin: float = 0.5
-    token_retries: int = 5
-    nr_of_beams: int = 3
-    max_beams: int = 5
-    mark_sentence: bool = False
+    # sampling
+    top_k: int = 10
+    temperature: float = 0.8
+    # beam-search
+    nr_of_beams: int = 10
+    beam_alpha: float = 0.75
+    beam_jitter: float = 0.1
+    beam_attempts: int = 3
+
+    # code book for output encoding
+    codebook: TokenCodeBook = field(init=False)
+    
+    def __post_init__(self):
+        self.codebook = TokenCodeBook(self.output_dimension)
 
     def generator_history_context_size(self) -> int:
         return self.generator_history_sentences[0] * 24 + self.generator_history_sentences[1] * 12

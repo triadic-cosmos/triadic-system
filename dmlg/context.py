@@ -133,6 +133,7 @@ class ModelInput:
     window: ContextWindow
     sequence_embedding: List[float]
     line: float
+    grammar: bool
 
 
 # ============================================================

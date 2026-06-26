@@ -9,11 +9,10 @@ from .config import Configuration
 from .writer_agent import WriterAgent
 from .writer_environment import WriterEnvironment
 from .sentence_encoder import SentenceEncoder
-from .multi_agent import MultiAgent
 from .curriculum import Curriculum
 from .tokens import TokenPage
 
-DATA_FOLDER: str = "../triadic-data/toy-system-v2/"
+DATA_FOLDER: str = "../triadic-data/toy-system-v3/"
 MODEL_FILENAME: str = "_model.bin"
 TOKENS_FILENAME: str = "_tokens.txt"
 OUTPUT_FILENAME: str = "_output.txt"
@@ -72,31 +71,19 @@ class AgentBuilder:
     def build_environment(self, configuration: Configuration, prefix: str) -> WriterEnvironment:
         environment = WriterEnvironment(configuration, self.grammar, self.semantic, self.sentence_encoder, prefix)
         return environment
-
-    def build_single_agent(self, environment: WriterEnvironment, variance: float) -> MultiAgent:
-        agent: WriterAgent = self.load_or_create_agent(environment)
-        return MultiAgent(environment, [agent], [10], variance)
                       
-    def train_agent(self, environment: WriterEnvironment, curriculum: Curriculum, explore: bool):
+    def train_agent(self, environment: WriterEnvironment, curriculum: Curriculum):
         print("Training agent from curriculum...")
         
-        if explore:
-            epochs = environment.configuration.explorer_training_epochs
-        else:
-            epochs = environment.configuration.generator_training_epochs
-        print(f"epochs = {epochs}")
+        warmup_epochs = environment.configuration.warmup_epochs
+        random_epochs = environment.configuration.random_epochs
+        print(f"warmup epochs = {warmup_epochs}")
+        print(f"train epochs = {random_epochs}")
    
         agent: WriterAgent = self.load_or_create_agent(environment)
         
-        if explore:
-            agent.build_index_from_curriculum(curriculum)
-            print(f"keywords = {len(agent.keyword_map)}")
+        agent.build_index_from_curriculum(curriculum)
+        print(f"keywords = {len(agent.keyword_map)}")
         
-        agent.train_curriculum(curriculum, epochs, explore)        
-        agent.save(self.model_filename(environment))
-
-    def optimize_agent(self, environment: WriterEnvironment):
-        print("Optimizing agent page models...")                    
-        agent: WriterAgent = self.load_or_create_agent(environment)
-        agent.optimize()
+        agent.train_curriculum(curriculum, warmup_epochs, random_epochs)        
         agent.save(self.model_filename(environment))

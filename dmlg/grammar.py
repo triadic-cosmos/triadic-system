@@ -1,4 +1,4 @@
-# grammar_engine.py
+# grammar.py
 
 from typing import List
 import re
@@ -10,19 +10,58 @@ import language_tool_python
 from .tokens import Token
 from .config import Configuration
 
+# All possible grammar tokens
+GRAMMAR_TOKENS = [
+    # Verbs
+    "<VERB-PRESENT>",
+    "<VERB-PRESENT-3S>",
+    "<VERB-PRESENT-1S>",
+    "<VERB-PAST>",
+    "<VERB-ING>",
+    "<VERB-INGV>",
+    "<VERB-PERFECT>",
+
+    # Nouns
+    "<NOUN>",
+    "<NOUN-PLURAL>",
+
+    # Pronouns / Determiners
+    "<PRON>",
+    "<PRONA>",
+    "<DET>",
+
+    # Modifiers
+    "<ADJ>",
+    "<ADV>",
+
+    # Function words
+    "<ADP>",
+    "<PART>",
+    "<SCONJ>",
+    "<CCONJ>",
+    "<NUM>",
+    "<PROPN>",
+    "<X>",
+    "<INTJ>",
+
+    # Punctuation
+    "<PERIOD>",
+    "<COMMA>",
+    "<EXCLAMATION>",
+    "<QUESTION>",
+    "<EOL>",
+]
+
 def count_tokens(tokens: List[Token], text: str) -> int:
-    count = 0
-    for token in tokens:
-        if token.text == text:
-            count += 1
-    return count                
+    return sum(1 for token in tokens if token.text == text)
+
 
 class GrammarEngine:
     """
-    Full canonical grammar engine:
+    Full canonical grammar engine (prefix style):
     - natural → canonical conversion
     - canonical → natural realization
-    - basic grammar validation    
+    - basic grammar validation
     - grammar fixing
     """
 
@@ -74,8 +113,10 @@ class GrammarEngine:
     def conjugate_present(self, verb: str, person_tag: str):
         # Special case: "be"
         if verb == "be":
-            if person_tag == "<1S>": return "am"
-            if person_tag == "<3S>": return "is"
+            if person_tag == "<1S>":
+                return "am"
+            if person_tag == "<3S>":
+                return "is"
             return "are"
 
         doc = self.nlp(verb)
@@ -105,7 +146,6 @@ class GrammarEngine:
             return form
 
         # Fallback: naive regular past
-        # (pyinflect sometimes fails for rare or invented verbs)
         if verb.endswith("e"):
             return verb + "d"
         if verb.endswith("y") and verb[-2] not in "aeiou":
@@ -125,11 +165,9 @@ class GrammarEngine:
             return False
         if tokens[tokenlen - 2].text not in ["<PERIOD>", "<EXCLAMATION>", "<QUESTION>"]:
             return False
-        text3 = tokens[tokenlen - 3].text
-        if text3[0] == '<' and text3 not in ["<PLURAL>", "<PRESENT>", "<PRESENT-1S>", "<PRESENT-3S>", "<PAST>"]:
-            return False
 
-        if count_tokens(tokens, "<VERB>") == 0:
+        # must contain at least one verb (any VERB-* prefix)
+        if not any(t.text.startswith("<VERB-") for t in tokens):
             return False
 
         return True
@@ -145,21 +183,21 @@ class GrammarEngine:
             return True
         return False
 
-    def get_tense(self, token):
+    def get_tense_tag(self, token):
         tag = token.tag_
         if tag == "VBD":
             if token.text == token.lemma_:
-                return "<PRESENT>"
-            return "<PAST>"
+                return "PRESENT"
+            return "PAST"
         if tag in ("VBP", "VBZ"):
-            return "<PRESENT>"
+            return "PRESENT"
         if tag == "VBG":
-            return "<ING>"
+            return "ING"
         if tag == "VBN":
-            return "<PERFECT>"
+            return "PERFECT"
         if tag == "VB":
-            return "<BASE>"
-        return "<PRESENT>"
+            return "BASE"
+        return "PRESENT"
 
     def get_person(self, token):
         # AUX → person from head
@@ -176,25 +214,38 @@ class GrammarEngine:
         if text in self.singular_overrides:
             return "<3S>"
 
-        if text == "i": return "<1S>"
-        if text == "you": return "<2S>"
-        if text in ("he", "she", "it"): return "<3S>"
-        if text == "we": return "<1P>"
-        if text == "they": return "<3P>"
-            
+        if text == "i":
+            return "<1S>"
+        if text == "you":
+            return "<2S>"
+        if text in ("he", "she", "it"):
+            return "<3S>"
+        if text == "we":
+            return "<1P>"
+        if text == "they":
+            return "<3P>"
+
         if "Number=Plur" in subj.morph:
             return "<3P>"
         return "<3S>"
 
-    def merge_tense_person(self, verb: str, tense: str, person: str):
-        if tense == "<PRESENT>":
-            # 3rd person singular always needs special tag
+    def merge_tense_person_prefix(self, verb: str, tense: str, person: str) -> str:
+        # tense: "PRESENT", "PAST", "ING", "PERFECT", "BASE"
+        if tense == "PRESENT":
             if person == "<3S>":
-                return "<PRESENT-3S>"
-            # 1st person singular only matters for "be"
+                return "<VERB-PRESENT-3S>"
             if verb == "be" and person == "<1S>":
-                return "<PRESENT-1S>"
-        return tense
+                return "<VERB-PRESENT-1S>"
+            return "<VERB-PRESENT>"
+        if tense == "PAST":
+            return "<VERB-PAST>"
+        if tense == "ING":
+            # ING vs INGV handled earlier
+            return "<VERB-ING>"
+        if tense == "PERFECT":
+            return "<VERB-PERFECT>"
+        # BASE or fallback
+        return "<VERB-PRESENT>"
 
     def convert_token(self, token):
         if token.pos_ == "SPACE":
@@ -210,50 +261,55 @@ class GrammarEngine:
             else:
                 return "<PERIOD><SPLIT>"
 
-        # Spacy bugs
+        # Spacy bug fix
         if token.text == "survivors":
-            return "<NOUN> survivor <PLURAL>"
+            return "<NOUN-PLURAL> survivor"
 
         if self.is_verb(token):
-            tense = self.get_tense(token)
-            if self.noverb and tense == "<PRESENT>":
+            tense = self.get_tense_tag(token)
+
+            if self.noverb and tense == "PRESENT":
                 # fallback for nouns detected as a verb
                 self.noverb = False
-                return f"<NOUN> {token.lemma_} <PLURAL>"
-            if tense == "<PERFECT>" and token.head.idx <= token.idx:
-                tense = "<PAST>"
-            if tense in ("<BASE>", "<PERFECT>"):
-                return f"{tense} {token.lemma_}"
-            elif tense == "<ING>":
+                # noun plural instead of verb
+                return f"<NOUN-PLURAL> {token.lemma_}"
+
+            # PERFECT tense before main verb → treat as PAST
+            if tense == "PERFECT" and token.head.idx <= token.idx:
+                tense = "PAST"
+
+            if tense == "ING":
+                # ING vs INGV
                 if self.afterverb or self.afteradpadv:
-                    tense = "<INGV>"
+                    prefix = "<VERB-INGV>"
                 else:
-                    tense = "<ING>"
-                return f"{tense} {token.lemma_}"
-            else:
+                    prefix = "<VERB-ING>"
+                return f"{prefix} {token.lemma_}"
+
+            if tense in ("BASE", "PERFECT", "PAST", "PRESENT"):
                 self.afterverb = True
                 person: str = self.get_person(token)
-                combined: str = self.merge_tense_person(token.lemma_, tense, person)
-                converted = f"<VERB> {token.lemma_} {combined}"
-                return converted
+                prefix: str = self.merge_tense_person_prefix(token.lemma_, tense, person)
+                return f"{prefix} {token.lemma_}"
 
+        # non-verb path
         self.afterverb = False
         self.afteradpadv = token.pos_ in ["ADP", "ADV"]
         self.noverb = token.pos_ in ["DET", "ADJ"]
 
         if token.pos_ == "NOUN":
-            converted = f"<NOUN> {token.lemma_}"
+            lemma = token.lemma_
             if token.morph.get("Number") == ["Plur"]:
-                converted += " <PLURAL>"
-            return converted
-        
+                return f"<NOUN-PLURAL> {lemma}"
+            return f"<NOUN> {lemma}"
+
         if token.pos_ == "PRON":
             text = token.text.lower()
             if text in ["its", "his", "her", "their"]:
                 return f"<PRONA> {text}"
             else:
                 return f"<PRON> {text}"
-            
+
         # This can come from abbreviations
         if token.text == ".":
             return ""
@@ -262,9 +318,10 @@ class GrammarEngine:
 
     # fixes some typical issues from spacy
     def fix_canonical(self, canonical: str) -> str:
+        # update patterns to prefix style if needed
         fixed = canonical \
-                .replace("<NOUN> be <PLURAL> <PRON> you", "<VERB> be <PRESENT> <PRON> you") \
-                .replace("<NOUN> can <PLURAL> <PRON> you", "<VERB> can <PRESENT> <PRON> you")
+            .replace("<NOUN-PLURAL> be <PRON> you", "<VERB-PRESENT> be <PRON> you") \
+            .replace("<NOUN-PLURAL> can <PRON> you", "<VERB-PRESENT> can <PRON> you")
         return fixed
 
     def convert_to_canonical(self, sentence):
@@ -290,12 +347,12 @@ class GrammarEngine:
     # Canonical → natural
     # ============================================================
 
-    def convert_from_canonical(self, canonical:str) -> str:
+    def convert_from_canonical(self, canonical: str) -> str:
         return self.convert_from_canonical_parts(canonical.replace("<SPLIT>", "").split())
 
     def convert_from_canonical_tokens(self, tokens: List[Token]) -> str:
         parts = [t.text for t in tokens]
-        return self.convert_from_canonical_parts(parts)        
+        return self.convert_from_canonical_parts(parts)
 
     # fixes some typical issues within generated canonical form
     def fix_natural(self, natural: str) -> str:
@@ -305,7 +362,7 @@ class GrammarEngine:
             .replace("I can you ", "I can ") \
             .replace("I do you ", "I do ") \
             .replace("I am you ", "I am ")
-    
+
     def convert_from_canonical_parts(self, tokens: List[str]) -> str:
         output = []
         i = 0
@@ -319,12 +376,12 @@ class GrammarEngine:
             if tok == "<EOL>":
                 i += 1
                 continue
-            
+
             # Simple tags
             if tok in ("<DET>", "<NUM>", "<ADJ>", "<ADV>", "<SCONJ>", "<CCONJ>", "<X>",
-                       "<PROPN>", "<ADP>", "<PART>", "<BASE>", "<PRON>", "<PRONA>", "<INTJ>"):
-                t = tokens[i+1]
-                if t == "i":                    
+                       "<PROPN>", "<ADP>", "<PART>", "<PRON>", "<PRONA>", "<INTJ>"):
+                t = tokens[i + 1]
+                if t == "i":
                     output.append("I")
                 else:
                     output.append(t)
@@ -333,43 +390,44 @@ class GrammarEngine:
 
             # Nouns
             if tok == "<NOUN>":
-                lemma = tokens[i+1]
-                if i+2 < len(tokens) and tokens[i+2] == "<PLURAL>":
-                    output.append(self.get_plural(lemma))
-                    i += 3
-                else:
-                    output.append(lemma)
-                    i += 2
+                lemma = tokens[i + 1]
+                output.append(lemma)
+                i += 2
                 continue
 
-            # ING
-            if tok.startswith("<ING"):
-                lemma = tokens[i+1]
+            if tok == "<NOUN-PLURAL>":
+                lemma = tokens[i + 1]
+                output.append(self.get_plural(lemma))
+                i += 2
+                continue
+
+            # VERB-ING / VERB-INGV
+            if tok in ("<VERB-ING>", "<VERB-INGV>"):
+                lemma = tokens[i + 1]
                 output.append(self.conjugate_ing(lemma))
                 i += 2
                 continue
-            
-            # PERFECT
-            if tok == "<PERFECT>":
-                lemma = tokens[i+1]
+
+            # VERB-PERFECT
+            if tok == "<VERB-PERFECT>":
+                lemma = tokens[i + 1]
                 output.append(self.conjugate_perfect(lemma))
                 i += 2
                 continue
 
-            # Verbs
-            if tok == "<VERB>":
-                lemma = tokens[i+1]
-                tense = tokens[i+2]
-                i += 3
+            # Verbs (prefix style)
+            if tok.startswith("<VERB-"):
+                lemma = tokens[i + 1]
+                i += 2
 
-                if tense == "<PAST>":
+                if tok == "<VERB-PAST>":
                     verb = self.conjugate_past(lemma)
-                elif tense == "<PRESENT>":                    
+                elif tok == "<VERB-PRESENT>":
                     verb = self.conjugate_present(lemma, "<3P>")
-                elif tense == "<PRESENT-3S>":
+                elif tok == "<VERB-PRESENT-3S>":
                     verb = self.conjugate_present(lemma, "<3S>")
-                elif tense == "<PRESENT-1S>":
-                    verb = self.conjugate_present(lemma, "<1S>")                    
+                elif tok == "<VERB-PRESENT-1S>":
+                    verb = self.conjugate_present(lemma, "<1S>")
                 else:
                     verb = lemma
 

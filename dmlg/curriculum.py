@@ -70,7 +70,7 @@ class Curriculum:
         return story
 
     def read_curriculum(self, filename: str, environment: WriterEnvironment):
-        with open(filename, "r", encoding="utf-8") as f:
+        with open(filename, "r", encoding='utf-8-sig') as f:
             lines = f.read().splitlines()
 
         sentences = []
@@ -101,21 +101,21 @@ class Curriculum:
         print(f"curriculum stories = {len(self.stories)}")
 
     def write_curriculum(self, filename: str):
-        with open(filename, "w", encoding='utf-8-sig') as file:
+        with open(filename, "w", encoding="utf-8-sig") as file:
             for story in self.stories:
                 for sentence in story.sentences:
                     file.write(sentence.get_canonical() + "\n")
                 file.write("\n")
 
-    def write_curriculum_natural(self, filename: str):
-        with open(filename, "w", encoding='utf-8-sig') as file:
+    def write_curriculum_natural(self, filename: str, ):
+        with open(filename, "w", encoding="utf-8-sig") as file:
             for story in self.stories:
                 for sentence in story.sentences:
                     file.write(sentence.natural + "\n")
                 file.write("\n")
 
     def read_prepocessed(self, filename:str, environment: WriterEnvironment):
-        with open(filename, "r", encoding="utf-8") as f:
+        with open(filename, "r", encoding="utf-8-sig") as f:
             lines = f.read().splitlines()
             sentences = []
             

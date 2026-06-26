@@ -2,19 +2,19 @@ from engine.triadic_trainer import TriadicTrainer
 
 import time
 
+MODEL = "hyde-mix"
+WARMUP_EPOCHS = 5
+VARIANTS = [15]
+
 # Training a dataset model with epoch variants
-model = "dynamic5"
-variants = [15]
 trainer: TriadicTrainer = TriadicTrainer()
 
-for variant in variants:
+for variant in VARIANTS:
     start = time.perf_counter()
 
     prefix = f"{variant}k"
-    explore_epochs = variant * 1000
     train_epochs = variant * 1000
-    explore = True
 
-    trainer.train(model, prefix, explore_epochs, train_epochs, explore)
+    trainer.train(MODEL, prefix, WARMUP_EPOCHS, train_epochs)
 
     print(f"Training time {prefix}: {time.perf_counter() - start:.1f} s")

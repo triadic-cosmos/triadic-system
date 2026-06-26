@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
+import difflib
 import random
 import re
 
@@ -13,7 +14,6 @@ from dmlg import (
     SemanticEngine,
     WriterStory,
     WriterAgent,
-    MultiAgent,
     Curriculum,
     CurriculumStory,
     CurriculumSentence,
@@ -49,6 +49,7 @@ BRIDGE_PROMPT = \
 "Keep it subtle and do not summarize either sequence. $CUSTOM " + \
 "Do not introduce new characters or objects that are not implied by the sequences. " + \
 "Do not introduce new events, only create a mood‑based transition. " + \
+"Avoid repetition, avoid recursive phrasing, avoid looping structures. " + \
 "Start the transition with 'The Begin.' and end it with 'The End.' as markers. " + \
 "Stop generation after writing the transition.\n" + \
 "The first sequence has title '$TITLE1' and text: $SEQ1\n" + \
@@ -78,7 +79,6 @@ CURRICULUM = "book"
 MAX_TOKENS = 2000
 MIN_LINES = 7
 MAX_LINES = 30
-VARIANCE = 0.5
 GEN_STORY_LINES = 15
 MIX_STORY_LINES = 5
 STORY_MIN_LINES = 10
@@ -95,11 +95,10 @@ class TriadicNarratorParams:
     bridge_custom: str
     end_custom: str
     model: str
-    prefixes: List[str]
-    guest_models: List[str]
-    guest_prefixes: List[str]
+    prefix: str
     keywords: set[str]
     min_score: int
+    use_beam: bool
 
 # Dataset distiller
 @dataclass
@@ -112,7 +111,7 @@ class TriadicDistiller:
 
     def __post_init__(self):
         self.environment = self.writer.agent.environment
-        self.agent = self.writer.agent.agents[0]
+        self.agent = self.writer.agent
         self.agent.configuration.hidden_size = 16
         self.agent.configuration.min_words = 3
 
@@ -162,7 +161,7 @@ class TriadicDistiller:
                 # Train the agent once on every new curriculum story
                 temp_curriculum = Curriculum()
                 temp_curriculum.stories.append(story)
-                self.agent.train_curriculum(temp_curriculum, 1, False)
+                self.agent.train_curriculum(temp_curriculum, 1, 0)
                 ratio = self.agent.page_transition_ratio()
                 generated += 1
                 print(f"stories = {generated}, ratio = {ratio}")                
@@ -226,26 +225,9 @@ class TriadicNarrator:
         self.rng = random.Random()
         self.index = 0
         
-        # Build the main writer ensemble
-        self.agents = []
-        for prefix in self.params.prefixes:
-            agent_environment = self.builder.build_environment(self.configuration, prefix)
-            agent: WriterAgent = self.builder.load_or_create_agent(agent_environment)
-            self.agents.append(agent)
-        
-        # Build the guest writer ensemble
-        self.guests = []
-        for i in range(len(self.params.guest_models)):
-            guest_config: Configuration = Configuration(self.params.guest_models[i])
-            guest_environment: WriterEnvironment = self.builder.build_environment(guest_config, self.params.guest_prefixes[i])
-            guest_agent: WriterAgent = self.builder.load_or_create_agent(guest_environment)
-            self.guests.append(guest_agent)
-
-        # Select environment
-        if len(self.agents) > 0:
-            self.environment = self.agents[0].environment        
-        else:
-            self.environment = self.guests[0].environment
+        # Build the writer agent
+        self.environment = self.builder.build_environment(self.configuration, self.params.prefix)
+        self.agent: WriterAgent = self.builder.load_or_create_agent(self.environment)
 
     def bridge_chapters(self, first: TriadicNarratorChapter, second: TriadicNarratorChapter) -> List[str]:
         prompt = BRIDGE_PROMPT \
@@ -272,19 +254,10 @@ class TriadicNarrator:
         
         return sentences
 
-    def create_ensemble_seed(self) -> WriterStory:
-        # Generate a multi-agent
-        ensemble = self.agents.copy()
-        if len(self.guests) > 0:
-            selected_guest = self.rng.choice(self.guests) 
-            ensemble.append(selected_guest)
-            print(f"guest = {selected_guest.configuration.name}")
-        multi_agent: MultiAgent = MultiAgent(
-            self.environment, ensemble, [10] * len(ensemble), VARIANCE)
-
+    def create_story(self) -> WriterStory:
         # Generate chapter seed with DMLG ensemble
         ctx_copy: ContextWindow = self.ctx.copy_current()
-        story = multi_agent.write_story(f"GEN-{self.index}", ctx_copy)
+        story = self.agent.write_story(f"GEN-{self.index}", ctx_copy)
                 
         # Validate and moderate the generated sequence
         if not self.params.validate_custom:
@@ -293,17 +266,6 @@ class TriadicNarrator:
         if self.llm.validate(validate_prompt, story.get_story(), MAX_TOKENS):
             return story
         return None
-
-    def create_multi_seed(self) -> WriterStory:
-        ctx_copy: ContextWindow = self.ctx.copy_current()
-        multi_story: WriterStory = WriterStory([])
-        for guest in self.guests:
-            multi_agent: MultiAgent = MultiAgent(guest.environment, [guest], [10], VARIANCE)
-            multi_agent.environment.configuration.story_lines = MIX_STORY_LINES
-            story = multi_agent.write_story(f"GEN-{self.index}", ctx_copy)
-            multi_story.sentences += story.sentences
-        print(f"MULTI-{self.index}. {multi_story.get_story()}")
-        return multi_story
 
     def add_to_context(self, moderated: List[str]):
         for line in moderated:
@@ -315,10 +277,7 @@ class TriadicNarrator:
         self.index += 1
         
         # Generate seed story with DMLG agents
-        if len(self.agents) == 0:
-            story = self.create_multi_seed()
-        else:
-            story = self.create_ensemble_seed()
+        story = self.create_story()
         if not story:
             return None
         
@@ -418,7 +377,7 @@ class TriadicNarrator:
         answer = self.llm.generate(keywords_prompt, MAX_TOKENS)
         new_keywords: set[str] = extract_keywords(answer)
         if new_keywords:
-            new_keywords = self.agents[0].filter_keywords(new_keywords)
+            new_keywords = self.agent.filter_keywords(new_keywords)
             print(f"new keywords = {','.join(new_keywords)}\n")
             return new_keywords
         return keywords
@@ -432,11 +391,10 @@ class TriadicNarrator:
 
     def write_sequential_book(self, min_chapters: int, max_chapters: int, nr_retries: int):
         output_filename = self.builder.curriculum_filename(self.environment, self.params.name)
-        multi_agent: MultiAgent = MultiAgent(self.environment, self.agents, [10] * len(self.agents), VARIANCE)
         fix_prompt = FIX_PROMPT.replace("$CUSTOM", self.params.fix_custom)
         end_prompt = END_PROMPT.replace("$CUSTOM", self.params.end_custom)
         previous: TriadicNarratorChapter = None
-        keywords: set[str] = self.agents[0].filter_keywords(self.params.keywords)
+        keywords: set[str] = self.agent.filter_keywords(self.params.keywords)
         chapters: int = 0
         print(f"keywords = {','.join(keywords)}")
         
@@ -446,7 +404,7 @@ class TriadicNarrator:
                 
                 # Create seed story with keywords
                 ctx_copy: ContextWindow = self.ctx.copy_current()
-                story = multi_agent.write_story(f"GEN-{self.index}", ctx_copy, None, keywords, True)
+                story = self.agent.write_story(f"GEN-{self.index}", ctx_copy, None, keywords, self.params.use_beam)
 
                 # Moderate seed story
                 moderated: List[str] = self.llm.moderate(fix_prompt, f"LLM-{self.index}", story, MAX_TOKENS)
@@ -472,8 +430,8 @@ class TriadicNarrator:
                     transition = None
                     for retry in range(1, nr_retries + 1):
                         transition = self.bridge_chapters(previous, chapter)
-                        if len(transition) >= BRIDGE_MIN_LINES:
-                            break
+                        if len(transition) >= BRIDGE_MIN_LINES and check_no_repetition(transition):
+                            break    
                         transition = None
                     if not transition:
                         print(f"Transition failed at try {retry}!")
@@ -545,3 +503,94 @@ def extract_keywords(text: str) -> set[str] | None:
                 keywords.add(token)
 
     return keywords if keywords else None
+
+
+def check_no_repetition(transitions: List[str],
+                        prefix_len: int = 10,
+                        min_repeat: int = 5,
+                        similarity_threshold: float = 0.85,
+                        structure_threshold: float = 0.75) -> bool:
+    """
+    Detects repetitive collapse in LLM transitions.
+    Returns True if transitions are clean (no repetition), False if collapse detected.
+
+    Parameters:
+        transitions: list of generated lines
+        prefix_len: number of characters to compare for prefix repetition
+        min_repeat: number of consecutive lines needed to flag repetition
+        similarity_threshold: semantic similarity threshold (0–1)
+    """
+
+    if len(transitions) < min_repeat:
+        return True  # too short to detect collapse
+
+    # --- 1. Check prefix repetition ---
+    prefixes = [t[:prefix_len] for t in transitions]
+    count = 1
+    for i in range(1, len(prefixes)):
+        if prefixes[i] == prefixes[i-1]:
+            count += 1
+            if count >= min_repeat:
+                return False
+        else:
+            count = 1
+
+    # --- 2. Check exact line repetition ---
+    count = 1
+    for i in range(1, len(transitions)):
+        if transitions[i].strip() == transitions[i-1].strip():
+            count += 1
+            if count >= min_repeat:
+                return False
+        else:
+            count = 1
+
+    # --- 3. Check semantic similarity repetition ---
+    # Uses difflib ratio to detect "same sentence with small changes"
+    count = 1
+    for i in range(1, len(transitions)):
+        sim = difflib.SequenceMatcher(None, transitions[i], transitions[i-1]).ratio()
+        if sim >= similarity_threshold:
+            count += 1
+            if count >= min_repeat:
+                return False
+        else:
+            count = 1
+
+    # --- 4. Check n-gram repetition (first 3 words) ---
+    def first_words(line, n=3):
+        return " ".join(line.split()[:n]).lower()
+
+    ngrams = [first_words(t) for t in transitions]
+    count = 1
+    for i in range(1, len(ngrams)):
+        if ngrams[i] == ngrams[i-1]:
+            count += 1
+            if count >= min_repeat:
+                return False
+        else:
+            count = 1
+
+    # --- 5. Structure-pattern repetition ---
+    def skeleton(line: str) -> str:
+        # remove names
+        line = re.sub(r"\b(Jekyll|Hyde|Utterson)\b", "", line, flags=re.I)
+        # remove nouns (approximation)
+        line = re.sub(r"\b(man|beast|city|mirror|light|darkness|creation|soul)\b", "", line, flags=re.I)
+        # collapse whitespace
+        line = re.sub(r"\s+", " ", line).strip()
+        return line.lower()
+
+    skels = [skeleton(t) for t in transitions]
+
+    count = 1
+    for i in range(1, len(skels)):
+        sim = difflib.SequenceMatcher(None, skels[i], skels[i-1]).ratio()
+        if sim >= structure_threshold:
+            count += 1
+            if count >= min_repeat:
+                return False
+        else:
+            count = 1
+
+    return True

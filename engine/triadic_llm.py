@@ -12,7 +12,7 @@ from dmlg import (
 # https://huggingface.co/unsloth/mistral-7b-instruct-v0.3-bnb-4bit
 # https://huggingface.co/unsloth/mistral-7b-instruct-v0.2-bnb-4bit
 # https://huggingface.co/Qwen/Qwen2.5-3B-Instruct
-MODEL_PATH = "../../mistral/"
+MODEL_PATH = "../../mistral3/"
 
 TEMPERATURE = 0.9
 TOP_P = 0.9

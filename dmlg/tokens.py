@@ -5,6 +5,21 @@ from uuid import UUID
 import math
 import random
 
+# Grammar tokens without lemma token
+TERMINAL_TOKENS = {
+    "<PERIOD>",
+    "<COMMA>",
+    "<EXCLAMATION>",
+    "<QUESTION>",
+    "<EOL>",
+}
+
+# Punctuation tokens to end a sentence
+PUNCTIATION_TOKENS = {
+    "<PERIOD>",
+    "<EXCLAMATION>",
+    "<QUESTION>",    
+}
 
 # ============================================================
 # Token
@@ -39,10 +54,17 @@ class Token:
     def is_eol(self) -> bool:
         return self._text == "<EOL>"
 
+    def is_terminal(self) -> bool:
+        return self._text in TERMINAL_TOKENS
+
+    def is_punctuation(self) -> bool:
+        return self._text in PUNCTIATION_TOKENS
+
+    def is_grammar(self) -> bool:
+        return self._text[0] == '<'
+
     def is_lemma(self) -> bool:
-        if self._text[0] == '<':
-            return False
-        return True
+        return self._text[0] != '<'
 
     @property
     def text(self) -> str:
@@ -113,38 +135,9 @@ class TokenLogit:
     token: Token
     logit: float
 
-
 # ============================================================
-# TokenMapping
+# TokenPage
 # ============================================================
-
-@dataclass
-class TokenMapping:
-    token_to_position: Dict[Token, int]
-    position_to_token: Dict[int, Token]
-
-    def encode(self, token: Token) -> List[float]:
-        """
-        One-hot encode a token:
-        - vector length = number of output tokens
-        - 1.0 at the mapped position
-        - 0.0 elsewhere
-        """
-        size = self.size()
-        vec = [0.0] * size
-        pos = self.map_to_position(token)
-        vec[pos] = 1.0
-        return vec
-
-    def map_to_position(self, token: Token) -> int:
-        return self.token_to_position[token]
-
-    def map_to_token(self, pos: int) -> Token:
-        return self.position_to_token[pos]
-
-    def size(self) -> int:
-        return len(self.token_to_position)
-
 
 # ============================================================
 # TokenPage
@@ -156,18 +149,20 @@ class TokenPage:
     input_tokens: set
     output_tokens: List[Token]
     output_token_set: set = field(init=False)
+    output_index: Dict[Token, int] = field(init=False)
 
     def __post_init__(self):
+        # Set for fast membership checks
         self.output_token_set = set(self.output_tokens)
+
+        # Dict for fast index lookup
+        self.output_index = {tok: idx for idx, tok in enumerate(self.output_tokens)}
 
     def input_size(self) -> int:
         return len(self.input_tokens)
 
     def output_size(self) -> int:
         return len(self.output_tokens)
-
-    def is_deterministic(self) -> bool:
-        return self.output_size() <= 1
 
     def add_input_token(self, token: str):
         self.input_tokens.add(token)
@@ -179,20 +174,74 @@ class TokenPage:
         if token not in self.output_token_set:
             self.output_tokens.append(token)
             self.output_token_set.add(token)
+            # update index map
+            self.output_index[token] = len(self.output_tokens) - 1
 
     def has_output_token(self, token: Token) -> bool:
         return token in self.output_token_set
 
+    def get_output_index(self, token: Token) -> int:
+        """
+        Returns the index of the token in the output list.
+        Raises KeyError if token not present.
+        """
+        return self.output_index[token]
+
     def get_first_output_token(self) -> Token:
         return self.output_tokens[0]
 
-    def to_output_mapping(self) -> TokenMapping:
-        token_to_pos = {}
-        pos_to_token = {}
-        for i, tok in enumerate(self.output_tokens):
-            token_to_pos[tok] = i
-            pos_to_token[i] = tok
-        return TokenMapping(token_to_pos, pos_to_token)
+    def get_size_text(self) -> str:
+        return f"{len(self.input_tokens)} -> {len(self.output_tokens)}"
+# ============================================================
+# TokenPage
+# ============================================================
+
+@dataclass
+class TokenPage:
+    uuid: UUID
+    input_tokens: set
+    output_tokens: List[Token]
+    output_token_set: set = field(init=False)
+    output_index: Dict[Token, int] = field(init=False)
+
+    def __post_init__(self):
+        # Set for fast membership checks
+        self.output_token_set = set(self.output_tokens)
+
+        # Dict for fast index lookup
+        self.output_index = {tok: idx for idx, tok in enumerate(self.output_tokens)}
+
+    def input_size(self) -> int:
+        return len(self.input_tokens)
+
+    def output_size(self) -> int:
+        return len(self.output_tokens)
+
+    def add_input_token(self, token: str):
+        self.input_tokens.add(token)
+
+    def has_input_token(self, token: str) -> bool:
+        return token in self.input_tokens
+
+    def add_output_token(self, token: Token):
+        if token not in self.output_token_set:
+            self.output_tokens.append(token)
+            self.output_token_set.add(token)
+            # update index map
+            self.output_index[token] = len(self.output_tokens) - 1
+
+    def has_output_token(self, token: Token) -> bool:
+        return token in self.output_token_set
+
+    def get_output_index(self, token: Token) -> int:
+        """
+        Returns the index of the token in the output list.
+        Raises KeyError if token not present.
+        """
+        return self.output_index[token]
+
+    def get_first_output_token(self) -> Token:
+        return self.output_tokens[0]
 
     def get_size_text(self) -> str:
         return f"{len(self.input_tokens)} -> {len(self.output_tokens)}"
@@ -264,3 +313,48 @@ class TokenDictionary:
 
     def __repr__(self):
         return f"TokenDictionary({list(self.map.keys())})"
+
+# ============================================================
+# TokenCodeBook
+# ============================================================
+
+class TokenCodeBook:
+    def __init__(self, output_dim: int = 32, max_tokens: int = 2000):
+        self.output_dim = output_dim
+        self.max_tokens = max_tokens
+
+        self.one_hot_dim = output_dim // 4              # 8
+        self.combo_dim = output_dim - self.one_hot_dim  # 24
+
+        # one-hot bits: 0..7
+        # tri-hot bits: 8..31
+
+        self._triple_codes = []
+        for i in range(self.combo_dim):
+            for j in range(i + 1, self.combo_dim):
+                for k in range(j + 1, self.combo_dim):
+                    self._triple_codes.append((i, j, k))
+
+        needed = max(0, max_tokens - self.one_hot_dim)
+        if needed > len(self._triple_codes):
+            raise ValueError(
+                f"Not enough triple-hot codes: need {needed}, have {len(self._triple_codes)}"
+            )
+
+    def get_bits(self, index: int):
+        if index < self.one_hot_dim:
+            # pure one-hot in first 8 bits
+            return [index]
+        else:
+            triple_index = index - self.one_hot_dim
+            i, j, k = self._triple_codes[triple_index]
+            # shift to combo-range: 8..31
+            return [self.one_hot_dim + i,
+                    self.one_hot_dim + j,
+                    self.one_hot_dim + k]
+
+    def get_vector(self, index: int):
+        vec = [0.0] * self.output_dim
+        for pos in self.get_bits(index):
+            vec[pos] = 1.0
+        return vec

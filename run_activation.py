@@ -14,10 +14,10 @@ from dmlg import (
     SentenceEncoder
 )
 
-DATA_FOLDER = "../triadic-data/toy-system-v2/"
+DATA_FOLDER = "../triadic-data/toy-system-v3/"
 MODEL_FILENAME = "_model.bin"
-MODEL_PREFIXES = ["comedy", "15k"]
-MODEL_NAME = "dynamic1"
+MODEL_PREFIXES = ["15k", "50k"]
+MODEL_NAME = "hyde-mix"
 
 def load_agent(name:str, prefix: str) -> WriterAgent:
     return WriterAgent.load(environment, DATA_FOLDER + name + "/" + prefix + MODEL_FILENAME)  

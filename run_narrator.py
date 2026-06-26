@@ -7,208 +7,56 @@ from engine.triadic_llm import TriadicLLM
 import time
 
 # Parameters
-VARIANCE = 0.3
-EPOCHS = 15000
-STORIES = 100
-MIN_CHAPTERS = 5
-MAX_CHAPTERS = 10
-RETRIES = 3
-
-# Comedy distillation prompt
-COMEDY_PROMPT = \
-"Write a short comical, absurd story. " + \
-"The main actors are a cunning fox and a scared rabbit. Fox is hunter, rabbit is prey." + \
-"At most one other animal actor can be in story : a wise raccoon, a crazy monkey or a hyperactive squirrel. " + \
-"Do not give names to the animals, just call them fox, raccoon, rabbit, monkey or squirrel, also no capitalisation. " + \
-"Location is a dark horror forest that tries to horrify and terrify all its inhabitants. " + \
-"Do not use complicated language or sentences. It should be easy to read and funny. " + \
-"The story should be at least ten lines and up to 20 total. All sentences have minimum 3 words. " + \
-"The story is descriptive, the animals can't talk or do conversations."
-
-# Comedy book parameters
-COMEDY_PARAMS = TriadicNarratorParams(
-    "comedy",
-    "Reject if the sequence breaks the fox and rabbit canon or the dark forest biome. Reject if it has no potential to be funny.",
-    "Do not name the actors. Make the story as funny as possible.",
-    "Maintain the canon: the fox is the hunter, the rabbit is the prey, and the setting is a dark forest. Preserve the tone: dark forest comedy with light tension and playful mischief.",
-    "",
-    "comedy",
-    ["first", "second", "third", "fourth"],
-    ["forest", "mix"],
-    ["1k", "1k"],
-    {},
-    80
-)
-
-# Hyde book parameters
-HYDE_PARAMS = TriadicNarratorParams(
-    "hyde",
-    "Reject if the atmosphere is happy or emotionless.",
-    "Make the story dark and gothic. Keep conflicting emotions.",
-    "Maintain the dark and gothic theme.",
-    "",
-    "hyde-mistral",
-    ["10k", "15k", "20k"],
-    ["hyde"],
-    ["15k"],
-    {},
-    60
-)
-
-# Owl book parameters
-OWL_PARAMS = TriadicNarratorParams(
-    "owl",
-    "Reject unless this is excellent source material. Reject if there is no cooperation between the birds.",
-    "Make it a nice and inspiring story about cooperation, creativity and writing.",
-    "Maintain the positive and cooperative atmosphere.",
-    "",
-    "owl",
-    ["10k", "15k"],
-    [],
-    [],
-    {},
-    85
-)
-
-# Mix book parameters
-MIX_PARAMS = TriadicNarratorParams(
-    "mix",
-    "",
-    "Combine all the narrative elements into a hilarious, compelling and outstanding story. Aim for a literary masterpiece.",
-    "Maintain the hilarious atmosphere and compelling story.",
-    "",
-    "mix",
-    [],
-    # only guest models -> do DMLG blending instead of DMLG ensemble writing
-    ["mix", "owl", "comedy", "hyde-mistral"], 
-    ["1k", "15k", "third", "10k"],
-    {},
-    75
-)
-
-# Time sequential book parameters
-TIME_PARAMS = TriadicNarratorParams(
-    "time",
-    None,
-    "Create a nice retro futuristic book chapter from this material. Use first‑person or third-person only. Smooth semantics where needed. Do not use exact years. Just give the plain text, no titles, sections.",
-    "Try to stitch the two given sequences as good as possible, be creative if necessary.",
-    "The book is a retro futuristic book with a time machine atmosphere.",
-    "time",
-    ["10k"], # beam search uses single agent
-    [], 
-    [],
-    {"machine", "engine", "gear", "metal", "light", "shadow", "corridor", "gallery", "structure", "valley", "signal", "tremor", "observe", "shift", "rise", "descend", "fragment", "haze", "surface", "echo"},
-    80
-)
+MIN_CHAPTERS = 42
+MAX_CHAPTERS = 48
+RETRIES = 2
 
 # Comedy sequential book parameters
-COMEDY2_PARAMS = TriadicNarratorParams(
+COMEDY_PARAMS = TriadicNarratorParams(
     "comedy",
-    None,
-    "Create a nice hilarious slapstick chapter from this material. Fox is hunter, rabbit is prey. Use third-person only. Smooth semantics where needed. Just give the plain text, no titles, sections.",
-    "Try to stitch the two given sequences as good as possible and keep it light and funny. Be creative where necessary.",
-    "The book is dark forest themed animal horror hilarious slapstick comedy.",
+    "Reject if this is not good material for a slapstick comedy scene.",
+    (
+        "Combine these sequences into a coherent slapstick comedy scene. "
+        "Use clear slapstick beats: setup, misunderstanding, escalation, physical comedy, reversal, punchline. "
+        "The environment is dangerous but humorous: unstable ground, falling branches, lava pits, sudden noises. "
+        "Keep the danger chaotic but non-lethal. "
+        "Use the canonical animals consistently: "
+        "fox (cunning but overconfident), rabbit (anxious and reactive), raccoon (wise but sarcastic), monkey (chaotic wildcard). "
+        "Maintain fast pacing, visual gags, and physical humor. "
+        "Ensure the danger contributes to the comedy and the scene remains coherent."
+    ),
+    "Find an original way to link the two sequences maintaining the slapstick and danger theme.",
+    "This is a slapstick comedy book about animals living in a dangerous environment.",
     "comedy",
-    ["first"], 
-    [], 
-    [],
-    {"fox", "rabbit", "forest", "engine", "metal", "vine", "corridor", "pulse", "lantern", "bark", "signal", "hollow", "hum", "observe", "descend", "coil", "flicker", "resonate", "creep", "distort", "awaken", "shift"},
-    80
+    "20k",
+    {"fox", "rabbit", "raccoon", "dark", "lava", "lesson", "forest", "shout", "fear"},
+    80,
+    True
 )
 
 # Hyde sequential book parameters
-HYDE2_PARAMS = TriadicNarratorParams(
+HYDE_PARAMS = TriadicNarratorParams(
     "hyde",
-    None,
-    "Make the story dark and gothic. Keep conflicting emotions. Use third-person only. Smooth semantics where needed. Just give the plain text, no titles, sections.",
-    "Maintain the dark and gothic theme during stitching. Be creative where necessary.",
-    "The book is dark and gothic with a lot of internal struggle.",
-    "hyde-mistral",
-    ["10k"],
-    [],
-    [],
-    {"shadow", "breath", "cold", "presence", "entity", "corridor", "engine", "pulse", "hum", "lantern", "metal", "vessel", "echo", "whisper", "tremble", "observe", "descend", "linger", "awaken", "drift"},
-    80
-)
-
-# Owl sequential book parameters
-OWL2_PARAMS = TriadicNarratorParams(
-    "owl",
-    None,
-    "Make it a nice and inspiring story about creativity and mysticism.  Use third-person only. Smooth semantics where needed. Just give the plain text, no titles, sections.",
-    "Maintain a positive and mystic atmosphere. Be creative where necessary.",
-    "The book is about creativity and mysticism.",
-    "owl",
-    ["10k"],
-    [],
-    [],
-    {"quill", "spark", "weave", "insight", "pattern", "echo", "guidance", "orbit", "celestial", "horizon", "stillness", "radiance", "alignment", "vastness", "origin", "whisper", "memory", "fragment", "emergence", "continuum", "presence"},
-    85
-)
-
-# Introduction sequential book parameters
-INTRO_PARAMS = TriadicNarratorParams(
-    "intro",
-    None,
-    "Make it a scientific and intriguing piece about language generation.",
-    "Maintain a creative and scientific atmosphere about language generation.",
-    "This is a book is about language generation.",
-    "intro",
-    ["1k"],
-    [],
-    [],
-    {"language", "graph", "token", "structure", "model", "generation", "intuition", "production", "navigation", "fog"},
-    85
-)
-
-# Forest sequential book parameters
-FOREST_PARAMS = TriadicNarratorParams(
-    "forest",
-    None,
-    "Combine this into a story about animals in dangerous horror environments.",
-    "Find an original way to link the two sequences maintaining the horror theme.",
-    "This is a book about animals living in constant horror.",
-    "forest",
-    ["1k"],
-    [],
-    [],
-    {"fox", "rabbit", "raccoon", "dark", "lava", "lesson", "forest", "shout", "fear"},
-    65
-)
-
-# Honeymoon sequential book parameters
-HONEYMOON_PARAMS = TriadicNarratorParams(
-    "honeymoon",
-    None,
-    "Combine this into an amazing space adventure of a man called Lenox and his bride Seraphina. Only Lenox and Seraphina appear as human characters. Do not name or describe any other humans. Polish the semantics where needed.",
-    "Link the two sequences maintaining the space adventure theme. Be creative if necessary.",
-    "This is a book about a space adventure.",
-    "honeymoon",
-    ["20k"],
-    [],
-    [],
-    {"orbit","vessel","star","planet","surface","valley","shadow","light","cluster","current","void","wind","look","travel","drift","approach","observe","float","follow","rise","touch","reach","join","meet","embrace"},
-    85
-)
-
-# Dynamic book parameters
-DYNAMIC_PARAMS = TriadicNarratorParams(
-    "comedy",
-    "Reject if this story has very little variation.",
-    "Combine this into a dark forest slapstick comedy horror story. Polish the semantics where needed.",
-    "Link the two sequences maintaining the dark forest slapstick comedy horror theme. Be creative if necessary.",
-    "This is a dark forest slapstick comedy horror story book.",
-    "dynamic5",
-    ["15k"],
-    [],
-    [],
-    {},
-    80
+    "Reject if this is not good material for a dark gothic story about internal struggle.",
+    ("Combine this into dark gothic story about internal struggle. "
+    "This story takes place strictly in the world of Jekyll & Hyde. "
+    "Use only the canonical characters Jekyll, Hyde, Utterson, Poole, Bradshaw. "
+    "Do not introduce characters or motifs from Frankenstein, Dracula, or other gothic works. "
+    "Maintain strict Victorian London atmosphere. "
+    "All scientific elements must be consistent with Jekyll’s original experiment. " 
+    "All internal struggle belongs to Jekyll and Hyde only. "),
+    "Find an original way to link the two sequences maintaining the dark gothic theme.",
+    "This is a dark gothic book about internal struggle.",
+    "hyde-mix",
+    "15k",
+    {"shadow", "fog", "laboratory", "potion", "guilt", "stain", "whisper", "conscience"},
+    90,
+    False
 )
 
 # Create writer
 def create_writer(name: str, prefix: str) -> TriadicWriter:    
-    return TriadicWriter(name, prefix, 20, VARIANCE)
+    return TriadicWriter(name, prefix, 20)
     
 # Train DMLG agent on curriculum
 def train_dmlg(model: str, prefix: str, epochs: int):
@@ -244,5 +92,5 @@ def write_sequential_book(params: TriadicNarratorParams, min_chapters: int, max_
 
 # Main
 start = time.perf_counter()
-write_book(DYNAMIC_PARAMS, MIN_CHAPTERS, RETRIES)
+write_sequential_book(HYDE_PARAMS, MIN_CHAPTERS, MAX_CHAPTERS, RETRIES)
 print(f"Elapsed time : {time.perf_counter() - start:.1f} s")

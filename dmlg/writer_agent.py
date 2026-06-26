@@ -4,6 +4,7 @@ from typing import List, Set, Dict, Optional
 from collections import defaultdict
 import random
 import pickle
+import math
 
 from .config import Configuration
 from .writer_environment import WriterEnvironment
@@ -11,7 +12,6 @@ from .writer_story import WriterStory, WriterSentence
 from .tokens import Token, TokenDictionary, TokenLogit
 from .context import ContextWindow, ModelInput
 from .paged_network import PagedNetwork, TrainingBatch
-from .transition_map import TransitionMap
 from .neural import ActivationMLP
 from .curriculum import Curriculum, CurriculumStory, CurriculumSentence
 from .grammar import GrammarEngine
@@ -26,7 +26,6 @@ class WriterAgent:
     keyword_count: Dict[str, int] = field(init=False)
     rng: random.Random = field(init=False)
     configuration: Configuration = field(init=False)
-    transition_map: TransitionMap = field(init=False)
     paged_network: PagedNetwork = field(init=False)
     token_dictionary: TokenDictionary = field(init=False)
     activation_mlp: ActivationMLP = field(init=False)
@@ -40,17 +39,15 @@ class WriterAgent:
 
         self.rng = random.Random()
 
-        self.transition_map = TransitionMap()
-
         # shared activation MLP for all pages
         self.activation_mlp = ActivationMLP(self.configuration.activation_hidden_size)
 
         self.paged_network = PagedNetwork(
             configuration=self.configuration,
-            transition_map=self.transition_map,
             activation_mlp=self.activation_mlp
         )
 
+        self.max_tokens = self.environment.configuration.max_tokens
         self.token_dictionary = TokenDictionary()
         self.keyword_map = dict()
         self.keyword_count = dict()
@@ -68,36 +65,56 @@ class WriterAgent:
     def page_transition_ratio(self) -> float:
         return self.training_count / self.nr_of_pages()
 
-    def train_curriculum(self, curriculum: Curriculum, epochs: int, explore: bool):
-        batch = TrainingBatch()
+    def train_story(self, epoch: int, story: CurriculumStory,
+                    context_window: ContextWindow, batch: TrainingBatch) -> TrainingBatch:
+        size = len(story.sentences) - 1
+        line = 0;
+        
+        for sentence in story.sentences:
+            line_frac: float = line / size
+            for target in sentence.tokens:
+                model_input: ModelInput = \
+                    ModelInput(context_window, story.embedding, line_frac, target.is_grammar())
+                self.training_count += 1
+                self.paged_network.learn(model_input, target, batch)
+                model_input.window.add_token(target)
+            context_window.add_sentence(sentence.encoded)
+            context_window.update_narrative_memory(sentence.tokens)
+            line += 1
+        
+        if epoch % self.environment.configuration.epochs_step == 0:
+            print(epoch)
+            self.learn_batch(batch)
+            return TrainingBatch()
+        return batch
+
+    def train_curriculum(self, curriculum: Curriculum, warmup_epochs: int, random_epochs: int):
         # Reuse context for all epochs
         context_window = ContextWindow(self.configuration)
-        
-        for epoch in range(1, epochs + 1):
-            story = curriculum.get_random_story(self.rng)
-            size = len(story.sentences) - 1
-            line = 0;
-            for sentence in story.sentences:
-                model_input: ModelInput = \
-                    ModelInput(context_window, story.embedding, line / size)
-                for target in sentence.tokens:
-                    self.training_count += 1
-                    self.paged_network.learn(model_input, target, batch)
-                    model_input.window.add_token(target)
-                context_window.add_sentence(sentence.encoded)
-                context_window.update_narrative_memory(sentence.tokens)
-                line += 1
-            if epoch % self.environment.configuration.epochs_step == 0:
-                print(epoch)
-                self.learn_batch(batch, explore)
-                batch = TrainingBatch()
-        
-        self.learn_batch(batch, explore)
+        batch = TrainingBatch()
+
+        # Train sequences using order curriculum 
+        warmup_epoch = 1
+        for _ in range(warmup_epochs):
+            for story in curriculum.stories:
+                batch = self.train_story(warmup_epoch, story, context_window, batch)
+                warmup_epoch += 1
+
+        self.learn_batch(batch)
         self.show()
 
-    def learn_batch(self, batch: TrainingBatch, explore: bool):
-        if explore:
-            return
+        # New batch
+        batch = TrainingBatch()
+        
+        # Train sequences using random order
+        for epoch in range(1, random_epochs + 1):
+            story = curriculum.get_random_story(self.rng)
+            batch = self.train_story(epoch, story, context_window, batch)
+        
+        self.learn_batch(batch)
+        self.show()
+
+    def learn_batch(self, batch: TrainingBatch):
         if len(batch.samples) == 0:
             return
         self.paged_network.learn_batch(batch)
@@ -204,14 +221,6 @@ class WriterAgent:
             print(sizes)
 
     # ------------------------------------------------------------
-    # Network optimizer
-    # ------------------------------------------------------------
-
-    def optimize(self):
-        self.paged_network.optimize()
-        self.training_count = 0 # reset counter
-
-    # ------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------
 
@@ -220,7 +229,6 @@ class WriterAgent:
             "id": self.id,
             "config": self.configuration,
             "token_dictionary": self.token_dictionary,
-            "transition_map": self.transition_map,
             "paged_network": self.paged_network,
             "activation_mlp": self.activation_mlp,
             "training_count": self.training_count,
@@ -238,7 +246,6 @@ class WriterAgent:
         agent = WriterAgent(environment, state["id"])
         agent.configuration = state["config"]
         agent.token_dictionary = state["token_dictionary"]
-        agent.transition_map = state["transition_map"]
         agent.paged_network = state["paged_network"]
         agent.activation_mlp = state["activation_mlp"]
         agent.training_count = state["training_count"]
@@ -246,5 +253,268 @@ class WriterAgent:
         agent.keyword_count = state["keyword_count"]
         
         print(f"Loaded agent {agent.id}.")
-        agent.show()
+        agent.show(True)
         return agent
+
+    # ------------------------------------------------------------
+    # Generation
+    # ------------------------------------------------------------
+
+    def propose_token(self, model_input: ModelInput) -> Optional[Token]:
+        outputs: List[TokenLogit] = self.paged_network.propose(model_input)
+
+        if not outputs:
+            return None
+
+        # 1. Top-k selection
+        candidates = outputs[:self.environment.configuration.top_k]
+
+        # 2. Softmax with temperature
+        temperature = self.environment.configuration.temperature 
+        exps = [math.exp(t.logit / temperature) for t in candidates]
+        total = sum(exps)
+        probs = [e / total for e in exps]
+
+        # 3. Probabilistic choice
+        selected = self.rng.choices(candidates, weights=probs, k=1)[0]
+
+        return selected.token
+
+    def generate_keywords(self, prompt: str) -> set:
+        all_keywords = set()
+        for key in self.keyword_map.keys():
+            all_keywords.add(key)
+        keywords = set()
+        tokens = self.environment.grammar.convert_to_canonical_tokens(prompt)
+        for token in tokens:
+            if token.text in all_keywords:
+                keywords.add(token.text)
+        return keywords
+  
+    def generate_sentence(self, sequence: List[float], line: float, ctx: ContextWindow, sentences: List[str]) -> WriterSentence:
+        generated: List[Token] = []
+        grammar = True
+
+        for _ in range(self.max_tokens):
+            proposal = self.propose_token(ModelInput(ctx, sequence, line, grammar))
+            if proposal is None:
+                break
+            generated.append(proposal)
+            ctx.add_token(proposal)
+            
+            if proposal == Token.EOL:
+                if self.environment.grammar.basic_validate_grammar_tokens(generated):
+                    natural = self.environment.grammar.convert_from_canonical_tokens(generated)
+                    if self.environment.semantic.validate(sentences, natural):        
+                        return WriterSentence(generated, natural, line)
+                return None # sentence failed quality check
+            
+            grammar = not grammar or proposal.is_terminal()
+
+        # close unfinished line in context
+        ctx.add_token(Token.EOL)
+        return None
+
+    def generate_sentence_beam_search(
+        self, sequence: List[float], line: float, ctx: ContextWindow,
+        keyword_scores: dict, used_tokens: set, sentences: List[str]
+    ) -> WriterSentence:
+
+        class Beam:
+            def __init__(self, tokens: List[Token], ctx: ContextWindow, score: float, grammar: bool):
+                self.tokens = tokens
+                self.ctx = ctx
+                self.score = score
+                self.grammar = grammar
+                self.eol = self.tokens[-1].is_eol() if self.tokens else False
+
+        # --- config parameters ---
+        top_k = self.environment.configuration.top_k
+        temperature = self.environment.configuration.temperature 
+        alpha = self.environment.configuration.beam_alpha         
+        jitter_amp = self.environment.configuration.beam_jitter
+        max_tokens = self.environment.configuration.max_tokens
+        nr_of_beams = self.environment.configuration.nr_of_beams
+
+        # --- initialize ---
+        beams: List[Beam] = [Beam([], ctx.copy_current(), 0, True)]
+        best_sentence = None
+        best_score = None
+
+        # --- step over full token range ---
+        for step in range(max_tokens):
+            if len(beams) == 0:
+                break
+
+            new_beams: List[Beam] = []
+
+            for beam in beams:
+                if beam.eol:
+                    new_beams.append(beam)
+                    continue
+
+                outputs: List[TokenLogit] = self.paged_network.propose(
+                    ModelInput(beam.ctx, sequence, line, beam.grammar)
+                )
+
+                if not outputs:
+                    continue
+
+                # --- top-k selection ---
+                candidates = outputs[:top_k]
+
+                # --- softmax over logits ---
+                logits = [c.logit for c in candidates]
+                exp_logits = [math.exp(l / temperature) for l in logits]
+                sum_exp = sum(exp_logits)
+                softmax_scores = [e / sum_exp for e in exp_logits]
+
+                for idx, logit in enumerate(candidates):
+                    tok = logit.token
+
+                    # fork context
+                    new_ctx = beam.ctx.copy_current()
+                    new_ctx.add_token(tok)
+                    new_tokens = beam.tokens + [tok]
+
+                    # softmax score
+                    score = softmax_scores[idx]
+
+                    # damping
+                    score = score ** alpha
+
+                    # multipliers
+                    if tok.is_eol():
+                        score *= 2.0
+                    if tok.text not in used_tokens:
+                        score *= 1.5
+
+                    # jitter
+                    score *= 1.0 + self.rng.random() * jitter_amp
+
+                    # keyword bonus
+                    score += keyword_scores.get(tok.text, 0)
+
+                    # accumulate with beam history
+                    total_score = score + beam.score * 0.9
+                    new_grammar = not beam.grammar or tok.is_terminal()
+
+                    # create new beam
+                    new_beam = Beam(new_tokens, new_ctx, total_score, new_grammar)
+
+                    # evaluate the new full sentence 
+                    if new_beam.eol:
+                        if best_sentence == None or new_beam.score >= best_score:
+                            if not self.environment.grammar.basic_validate_grammar_tokens(new_tokens):
+                                continue # ignore invalid beam
+                            natural = self.environment.grammar.convert_from_canonical_tokens(new_tokens)
+                            if not self.environment.semantic.validate(sentences, natural):
+                                continue
+                            # a new validated best beam is found
+                            best_sentence = WriterSentence(new_tokens, natural, line)
+                            best_score = score
+
+                    new_beams.append(new_beam)
+
+            # prune beams
+            new_beams.sort(key=lambda b: b.score, reverse=True)
+
+            # beams = top_k best beams
+            beams = new_beams[:nr_of_beams]
+
+            if all(b.eol for b in beams):
+                break
+
+        if best_sentence:
+            return best_sentence
+
+        print("X", end="")
+        return []
+
+    def evaluate_context(self, before_ctx: List[float], ctx: ContextWindow) -> float:
+        if self.evaluator == None:
+            return 1.0
+        else:
+            return self.evaluator.evaluate(before_ctx, ctx)
+
+    def fix_story(self, story: WriterStory):
+        for sentence in story.sentences:
+            sentence.fixed = self.environment.grammar.fix_grammar(sentence.natural) 
+    
+    def write_story(self, prefix: str, ctx: ContextWindow, prompt: str = None, keywords: Set[str] = None, beam_search: bool = False) -> WriterStory:
+        index: int = 0
+        lines: int = self.environment.configuration.story_lines
+
+        # use first agent to select sequence embedding
+        sequence_embedding = self.choose_best_embedding(keywords)
+
+        if prompt != None and len(prompt) > 0:
+            while True:
+                # fill up whole context with prompt
+                for prompt_line in prompt:
+                    tokens = self.environment.grammar.convert_to_canonical_tokens(prompt_line)
+                    encoded = self.sentence_encoder.encode_sentence(tokens)
+                    ctx.add_sentence(encoded)
+                    ctx.update_narrative_memory(tokens)
+                if ctx.is_filled():
+                    break
+            
+        sentences = []
+        writer_sentences = []
+        nr_of_tokens = self.environment.configuration.max_tokens
+        if keywords != None:
+            keyword_scores = dict()
+            for keyword in keywords:
+                keyword_scores[keyword] = 1.0
+            used_tokens = set()           
+
+        print("> generating", end= " ")
+        beam_attempts = self.configuration.beam_attempts
+        for i in range(self.environment.configuration.max_attempts):
+            ctx.clear_current_sentence()
+            if lines == 1:
+                line = 1
+            else:
+                line = index / (lines - 1)
+ 
+            if beam_search and beam_attempts > 0 and keywords != None:
+                sentence = self.generate_sentence_beam_search(sequence_embedding, line, ctx, keyword_scores, used_tokens, sentences)
+                if not sentence:
+                    beam_attempts -= 1
+                    continue
+                for token in sentence.tokens:
+                    used_tokens.add(token)
+                    if token.text in keyword_scores:
+                        keyword_scores[token.text] = keyword_scores[token.text] * 0.9                
+            else:
+                sentence = self.generate_sentence(sequence_embedding, line, ctx, sentences)
+                if not sentence:
+                    continue
+        
+            print(f"{index}", end = " ")
+            sentences.append(sentence.natural)
+            writer_sentences.append(sentence)
+            encoded = self.environment.sentence_encoder.encode_sentence(sentence.tokens)
+            ctx.add_sentence(encoded)
+            ctx.update_narrative_memory(sentence.tokens)
+            index += 1
+            if index == lines:
+                break
+            beam_attempts = self.configuration.beam_attempts
+
+        print("done")
+        story = WriterStory(writer_sentences)
+        self.fix_story(story)
+        print(f"{prefix}. {story.get_story()}")
+        return story
+
+    def build_output(self, output_path: str, amount: int, prompt: List[str] = None, keywords: Set[str] = None, beam_search: bool = False):
+        index = 1
+        with open(output_path, "w", encoding='utf-8-sig') as file:
+            while index <= amount:
+                ctx: ContextWindow = ContextWindow(self.environment.configuration)            
+                story = self.write_story(f"STORY-{index}", ctx, prompt, keywords, beam_search)
+                for sentence in story.sentences:
+                    file.write(sentence.fixed + "\n")
+                file.write("\n")
+                index += 1

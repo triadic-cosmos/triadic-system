@@ -4,7 +4,6 @@ from typing import List, Set
 
 from dmlg import (
     WriterAgent,
-    MultiAgent,
     Configuration,
     WriterEnvironment,
     AgentBuilder
@@ -15,14 +14,13 @@ class TriadicWriter:
     name: str
     prefix: str
     num_lines: int
-    variance: float
     
     def __post_init__(self):
         self.configuration: Configuration = Configuration(self.name)
         self.configuration.story_lines = self.num_lines
         self.builder = AgentBuilder(self.configuration)
         self.environment: WriterEnvironment = self.builder.build_environment(self.configuration, self.prefix)
-        self.agent: MultiAgent = self.builder.build_single_agent(self.environment, self.variance)
+        self.agent: WriterAgent = self.builder.load_or_create_agent(self.environment)
         
     def write(self, amount: int, prompt: List[str] = None, keywords: set[str] = None, beam_search: bool = False):
         print("Generating output...")

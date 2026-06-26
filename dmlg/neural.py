@@ -3,19 +3,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# Special activation functions
-def silugelu(x):
-    return F.silu(x) + 0.3 * F.gelu(x)
-
-def hardgate(x):
-    return (x > 0.2).float() * x
-
-def explodegate(x):
-    return x * torch.exp(0.5 * x)
-
-def spike(x):
-    return torch.exp(-10 * x * x)
-
 # Activation MLP
 class ActivationMLP(nn.Module):
     def __init__(self, hidden):
@@ -26,7 +13,7 @@ class ActivationMLP(nn.Module):
 
     def forward(self, x):
         x = F.silu(self.fc1(x))
-        x = F.silu(self.fc2(x))
+        x = F.gelu(self.fc2(x))
         return self.fc3(x)
 
 class AMLPActivation(nn.Module):
@@ -56,16 +43,3 @@ class NeuralNetwork(nn.Module):
         h = self.act(self.fc1(x))
         h = self.act(self.fc2(h))
         return self.fc3(h)
-
-    def add_output_channel(self):
-        new = NeuralNetwork(self.input_size, self.hidden_size, self.output_size + 1, self.activation)
-        with torch.no_grad():
-            new.fc1.weight.copy_(self.fc1.weight)
-            new.fc1.bias.copy_(self.fc1.bias)
-            new.fc2.weight.copy_(self.fc2.weight)
-            new.fc2.bias.copy_(self.fc2.bias)
-            new.fc3.weight[:-1].copy_(self.fc3.weight)
-            new.fc3.bias[:-1].copy_(self.fc3.bias)
-            new.fc3.weight[-1].zero_()
-            new.fc3.bias[-1].zero_()
-        return new
