@@ -8,7 +8,6 @@ from .tokens import Token
 class WriterSentence:
     tokens: List[Token]
     natural: str
-    line: float
     fixed: str = field(init=False)
     
     def __post_init__(self):

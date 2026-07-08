@@ -10,48 +10,6 @@ import language_tool_python
 from .tokens import Token
 from .config import Configuration
 
-# All possible grammar tokens
-GRAMMAR_TOKENS = [
-    # Verbs
-    "<VERB-PRESENT>",
-    "<VERB-PRESENT-3S>",
-    "<VERB-PRESENT-1S>",
-    "<VERB-PAST>",
-    "<VERB-ING>",
-    "<VERB-INGV>",
-    "<VERB-PERFECT>",
-
-    # Nouns
-    "<NOUN>",
-    "<NOUN-PLURAL>",
-
-    # Pronouns / Determiners
-    "<PRON>",
-    "<PRONA>",
-    "<DET>",
-
-    # Modifiers
-    "<ADJ>",
-    "<ADV>",
-
-    # Function words
-    "<ADP>",
-    "<PART>",
-    "<SCONJ>",
-    "<CCONJ>",
-    "<NUM>",
-    "<PROPN>",
-    "<X>",
-    "<INTJ>",
-
-    # Punctuation
-    "<PERIOD>",
-    "<COMMA>",
-    "<EXCLAMATION>",
-    "<QUESTION>",
-    "<EOL>",
-]
-
 def count_tokens(tokens: List[Token], text: str) -> int:
     return sum(1 for token in tokens if token.text == text)
 
@@ -248,7 +206,7 @@ class GrammarEngine:
         return "<VERB-PRESENT>"
 
     def convert_token(self, token):
-        if token.pos_ == "SPACE":
+        if token.pos_ == "SPACE" or token.pos_ == "SYM":
             return ""
 
         if token.pos_ == "PUNCT":

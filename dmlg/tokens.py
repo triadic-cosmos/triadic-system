@@ -5,6 +5,48 @@ from uuid import UUID
 import math
 import random
 
+# All possible grammar tokens
+GRAMMAR_TOKENS = [
+    # Verbs
+    "<VERB-PRESENT>",
+    "<VERB-PRESENT-3S>",
+    "<VERB-PRESENT-1S>",
+    "<VERB-PAST>",
+    "<VERB-ING>",
+    "<VERB-INGV>",
+    "<VERB-PERFECT>",
+
+    # Nouns
+    "<NOUN>",
+    "<NOUN-PLURAL>",
+
+    # Pronouns / Determiners
+    "<PRON>",
+    "<PRONA>",
+    "<DET>",
+
+    # Modifiers
+    "<ADJ>",
+    "<ADV>",
+
+    # Function words
+    "<ADP>",
+    "<PART>",
+    "<SCONJ>",
+    "<CCONJ>",
+    "<NUM>",
+    "<PROPN>",
+    "<X>",
+    "<INTJ>",
+
+    # Punctuation
+    "<PERIOD>",
+    "<COMMA>",
+    "<EXCLAMATION>",
+    "<QUESTION>",
+    "<EOL>",
+]
+
 # Grammar tokens without lemma token
 TERMINAL_TOKENS = {
     "<PERIOD>",
@@ -50,7 +92,9 @@ class Token:
         self._large_embedding = self._compute_embedding(self._id, LARGE_EMBEDDING_SIZE)
         self._medium_embedding = self._compute_embedding(self._id, MEDIUM_EMBEDDING_SIZE)
         self._small_embedding = self._compute_small_embedding(self._id)
-
+        self._grammar_index: Optional[int] = None
+        self._lemma_index: Optional[int] = None
+        
     def is_eol(self) -> bool:
         return self._text == "<EOL>"
 
@@ -74,6 +118,22 @@ class Token:
     def id(self) -> int:
         return self._id
 
+    @property
+    def grammar_index(self) -> Optional[int]:
+        return self._grammar_index
+
+    @grammar_index.setter
+    def grammar_index(self, idx: int):
+        self._grammar_index = idx
+
+    @property
+    def lemma_index(self) -> Optional[int]:
+        return self._lemma_index
+
+    @lemma_index.setter
+    def lemma_index(self, idx: int):
+        self._lemma_index = idx
+        
     @property
     def memory_embedding(self) -> List[float]:
         return self._memory_embedding
@@ -289,20 +349,46 @@ class TokenPages:
 # ============================================================
 
 class TokenDictionary:
-    """
-    Minimal dictionary that ensures:
-    - deterministic token creation
-    - no duplicates
-    """
-
     def __init__(self):
         self.map: Dict[str, Token] = {}
+        self._next_lemma_index = 0
+
+        # 1. Preload all grammar tokens with fixed indices
+        for idx, text in enumerate(GRAMMAR_TOKENS):
+            tok = Token(text)
+            tok.grammar_index = idx
+            self.map[text] = tok
+
+        # 2. Also preload EOL and NONE if needed
+        Token.EOL.grammar_index = GRAMMAR_TOKENS.index("<EOL>")
+        self.map["<EOL>"] = Token.EOL
+
+        Token.NONE.grammar_index = None
+        self.map["<NONE>"] = Token.NONE
 
     def add_and_get(self, text: str) -> Token:
+        # Already known?
         if text in self.map:
             return self.map[text]
+
+        # Create new token
         tok = Token(text)
         self.map[text] = tok
+
+        # Grammar token?
+        if tok.is_grammar():
+            # Grammar tokens should already be preloaded
+            # but if new grammar tokens appear, assign index dynamically
+            if tok.text in GRAMMAR_TOKENS:
+                tok.grammar_index = GRAMMAR_TOKENS.index(tok.text)
+            else:
+                raise ValueError(f"Unknown grammar token: {tok.text}")
+            return tok
+
+        # Lemma token → assign lemma_index
+        tok.lemma_index = self._next_lemma_index
+        self._next_lemma_index += 1
+
         return tok
 
     def __contains__(self, text: str) -> bool:
@@ -315,45 +401,61 @@ class TokenDictionary:
         return f"TokenDictionary({list(self.map.keys())})"
 
 # ============================================================
+# LemmaGrammarDictionary
+# ============================================================
+
+class LemmaGrammarDictionary:
+    def __init__(self):
+        self.mask: Dict[int, int] = {}
+
+    def set_mask(self, lemma_index: int, mask: int):
+        self.mask[lemma_index] = mask
+
+    def is_compatible(self, lemma_index: int, grammar_index: int) -> bool:
+        m = self.mask.get(lemma_index, 0)
+        return bool(m & (1 << grammar_index))
+
+# ============================================================
 # TokenCodeBook
 # ============================================================
 
 class TokenCodeBook:
-    def __init__(self, output_dim: int = 32, max_tokens: int = 2000):
+    """
+    Pure tri-hot codebook:
+    - Entire output_dim is used as combinatorial space.
+    - Every token is encoded as 3 distinct bits.
+    """
+
+    def __init__(self, output_dim: int = 75, max_tokens: int = 65536):
         self.output_dim = output_dim
         self.max_tokens = max_tokens
 
-        self.one_hot_dim = output_dim // 4              # 8
-        self.combo_dim = output_dim - self.one_hot_dim  # 24
+        # tri-hot region is now the entire output space
+        self.combo_dim = output_dim
 
-        # one-hot bits: 0..7
-        # tri-hot bits: 8..31
-
+        # Precompute all tri-hot combinations
         self._triple_codes = []
         for i in range(self.combo_dim):
             for j in range(i + 1, self.combo_dim):
                 for k in range(j + 1, self.combo_dim):
                     self._triple_codes.append((i, j, k))
 
-        needed = max(0, max_tokens - self.one_hot_dim)
-        if needed > len(self._triple_codes):
+        if max_tokens > len(self._triple_codes):
             raise ValueError(
-                f"Not enough triple-hot codes: need {needed}, have {len(self._triple_codes)}"
+                f"Not enough tri-hot codes: need {max_tokens}, have {len(self._triple_codes)}"
             )
 
     def get_bits(self, index: int):
-        if index < self.one_hot_dim:
-            # pure one-hot in first 8 bits
-            return [index]
-        else:
-            triple_index = index - self.one_hot_dim
-            i, j, k = self._triple_codes[triple_index]
-            # shift to combo-range: 8..31
-            return [self.one_hot_dim + i,
-                    self.one_hot_dim + j,
-                    self.one_hot_dim + k]
+        """
+        Return the 3 bit positions for this token.
+        """
+        i, j, k = self._triple_codes[index]
+        return [i, j, k]
 
     def get_vector(self, index: int):
+        """
+        Return a float vector with 3 ones.
+        """
         vec = [0.0] * self.output_dim
         for pos in self.get_bits(index):
             vec[pos] = 1.0

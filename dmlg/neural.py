@@ -39,6 +39,8 @@ class NeuralNetwork(nn.Module):
         self.activation: ActivationMLP = activation
         self.act = AMLPActivation(activation)
 
+        self.opt = torch.optim.Adam(self.parameters(), lr=1e-3)
+
     def forward(self, x):
         h = self.act(self.fc1(x))
         h = self.act(self.fc2(h))

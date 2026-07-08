@@ -8,17 +8,20 @@ from .tokens import TokenCodeBook
 class Configuration:
     name: str
     # model parameters
-    hidden_size: int = 32
-    activation_hidden_size: int = 32
-    output_dimension: int = 32
-    total_pages: int = 300
+    grammar_hidden_size: int = 256
+    lemma_hidden_size: int = 1024
+    activation_hidden_size: int = 64
+    bits_dimension: int = 16
+    triple_dimension: int = 75
+    grammar_dimension: int = 27
+    total_pages: int = 309
     # context
     generator_history_sentences = [5, 15]
     context_max_sentences = 80
     content_max_lemmas = 30
     # curriculum
     no_roundtrip: bool = True
-    max_stories: int = 1000
+    max_stories: int = 2000
     min_story_lines: int = 3
     min_sentence_length: int = 10
     # needed epochs depend on dataset size
@@ -32,7 +35,8 @@ class Configuration:
     story_lines: int = 20
     max_attempts: int = 20000
     # sampling
-    top_k: int = 10
+    grammar_top_k: int = 3
+    lemma_top_k: int = 10
     temperature: float = 0.8
     # beam-search
     nr_of_beams: int = 10
@@ -44,15 +48,19 @@ class Configuration:
     codebook: TokenCodeBook = field(init=False)
     
     def __post_init__(self):
-        self.codebook = TokenCodeBook(self.output_dimension)
+        self.codebook = TokenCodeBook(self.triple_dimension)
 
     def generator_history_context_size(self) -> int:
         return self.generator_history_sentences[0] * 24 + self.generator_history_sentences[1] * 12
 
-    def current_context_size(self) -> int:
-        # forelast embedding (4) + last embedding (4) + token index (1) 
-        return self.content_max_lemmas + 9
-
     def generator_input_size(self) -> int:
-        # narrative memory embedding (128) + sequence embedding (8) + line index (1)
-        return self.generator_history_context_size() + self.current_context_size() + 137
+        # narrative memory embedding (128) + sequence embedding (8) + current position (1)
+        return self.generator_history_context_size() + self.content_max_lemmas + 137
+    
+    def generator_output_size(self) -> int:
+        return self.bits_dimension + self.triple_dimension + self.total_pages
+
+    def get_top_k(self, grammar: bool) -> float:
+        if grammar:
+            return self.grammar_top_k
+        return self.lemma_top_k

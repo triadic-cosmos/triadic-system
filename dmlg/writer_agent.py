@@ -11,11 +11,8 @@ from .writer_environment import WriterEnvironment
 from .writer_story import WriterStory, WriterSentence
 from .tokens import Token, TokenDictionary, TokenLogit
 from .context import ContextWindow, ModelInput
-from .paged_network import PagedNetwork, TrainingBatch
-from .neural import ActivationMLP
+from .glp_network import GlpNetwork, TrainingBatch
 from .curriculum import Curriculum, CurriculumStory, CurriculumSentence
-from .grammar import GrammarEngine
-from .semantic import SemanticEngine
 
 @dataclass
 class WriterAgent:
@@ -26,9 +23,8 @@ class WriterAgent:
     keyword_count: Dict[str, int] = field(init=False)
     rng: random.Random = field(init=False)
     configuration: Configuration = field(init=False)
-    paged_network: PagedNetwork = field(init=False)
+    glp_network: GlpNetwork = field(init=False)
     token_dictionary: TokenDictionary = field(init=False)
-    activation_mlp: ActivationMLP = field(init=False)
 
     training_count: int = 0
 
@@ -39,49 +35,37 @@ class WriterAgent:
 
         self.rng = random.Random()
 
-        # shared activation MLP for all pages
-        self.activation_mlp = ActivationMLP(self.configuration.activation_hidden_size)
-
-        self.paged_network = PagedNetwork(
-            configuration=self.configuration,
-            activation_mlp=self.activation_mlp
-        )
-
         self.max_tokens = self.environment.configuration.max_tokens
         self.token_dictionary = TokenDictionary()
         self.keyword_map = dict()
         self.keyword_count = dict()
 
+        self.glp_network = GlpNetwork(self.configuration, self.token_dictionary)
+
     def __str__(self):
-        return f"[{self.id}] trainings = {self.training_count}, pages = {len(self.paged_network.page_list)}"
+        return f"[{self.id}] trainings = {self.training_count}"
         
     # ------------------------------------------------------------
     # Learning and curriculum training
     # ------------------------------------------------------------
 
-    def nr_of_pages(self) -> int:
-        return len(self.paged_network.page_list)
-
-    def page_transition_ratio(self) -> float:
-        return self.training_count / self.nr_of_pages()
-
     def train_story(self, epoch: int, story: CurriculumStory,
                     context_window: ContextWindow, batch: TrainingBatch) -> TrainingBatch:
-        size = len(story.sentences) - 1
-        line = 0;
-        
         for sentence in story.sentences:
-            line_frac: float = line / size
-            for target in sentence.tokens:
-                model_input: ModelInput = \
-                    ModelInput(context_window, story.embedding, line_frac, target.is_grammar())
+            # 1. train for each token
+            for tok in sentence.tokens:
+                target = self.token_dictionary.add_and_get(tok.text)
+                model_input = ModelInput(context_window, story.embedding, target.is_grammar())
                 self.training_count += 1
-                self.paged_network.learn(model_input, target, batch)
+                self.glp_network.learn(model_input, target, batch)
                 model_input.window.add_token(target)
-            context_window.add_sentence(sentence.encoded)
-            context_window.update_narrative_memory(sentence.tokens)
-            line += 1
-        
+
+            # 2. context / narrative for each sentence
+            dict_tokens = [self.token_dictionary.add_and_get(t.text) for t in sentence.tokens]
+            encoded = self.environment.sentence_encoder.encode_sentence(dict_tokens)
+            context_window.add_sentence(encoded)
+            context_window.update_narrative_memory(dict_tokens)
+
         if epoch % self.environment.configuration.epochs_step == 0:
             print(epoch)
             self.learn_batch(batch)
@@ -117,22 +101,7 @@ class WriterAgent:
     def learn_batch(self, batch: TrainingBatch):
         if len(batch.samples) == 0:
             return
-        self.paged_network.learn_batch(batch)
-
-    def learn_stories(self, teacher):
-        stories = []
-
-        story_target = self.configuration.story_training
-
-        for i in range(story_target):
-            story = teacher.write_story(False, False, f"LEARN-{i}")
-            stories.append(story)
-
-        for story in stories:
-            batch = TrainingBatch([])
-            for sentence in story.sentences:
-                self.learn_sentence(sentence.tokens, sentence.line, batch)
-            self.learn_batch(batch)
+        self.glp_network.learn_batch(batch)
 
     # ------------------------------------------------------------
     # Curriculum story indexing
@@ -213,10 +182,10 @@ class WriterAgent:
 
     def show(self, full = False):
         print(f"training count = {self.training_count}")
-        print(f"page count = {len(self.paged_network.page_list)}")
+        print(f"page count = {len(self.glp_network.page_list)}")
         if full:
             sizes = []
-            for page in self.paged_network.page_list:
+            for page in self.glp_network.page_list:
                 sizes.append(page.get_size_text())
             print(sizes)
 
@@ -229,8 +198,7 @@ class WriterAgent:
             "id": self.id,
             "config": self.configuration,
             "token_dictionary": self.token_dictionary,
-            "paged_network": self.paged_network,
-            "activation_mlp": self.activation_mlp,
+            "glp_network": self.glp_network,
             "training_count": self.training_count,
             "keyword_map": self.keyword_map,
             "keyword_count": self.keyword_count,
@@ -246,8 +214,7 @@ class WriterAgent:
         agent = WriterAgent(environment, state["id"])
         agent.configuration = state["config"]
         agent.token_dictionary = state["token_dictionary"]
-        agent.paged_network = state["paged_network"]
-        agent.activation_mlp = state["activation_mlp"]
+        agent.glp_network = state["glp_network"]
         agent.training_count = state["training_count"]
         agent.keyword_map = state["keyword_map"]
         agent.keyword_count = state["keyword_count"]
@@ -261,13 +228,14 @@ class WriterAgent:
     # ------------------------------------------------------------
 
     def propose_token(self, model_input: ModelInput) -> Optional[Token]:
-        outputs: List[TokenLogit] = self.paged_network.propose(model_input)
+        outputs: List[TokenLogit] = self.glp_network.propose(model_input)
 
         if not outputs:
             return None
 
         # 1. Top-k selection
-        candidates = outputs[:self.environment.configuration.top_k]
+        top_k = self.environment.configuration.get_top_k(model_input.grammar)
+        candidates = outputs[:top_k]
 
         # 2. Softmax with temperature
         temperature = self.environment.configuration.temperature 
@@ -291,32 +259,34 @@ class WriterAgent:
                 keywords.add(token.text)
         return keywords
   
-    def generate_sentence(self, sequence: List[float], line: float, ctx: ContextWindow, sentences: List[str]) -> WriterSentence:
+    def generate_sentence(self, sequence: List[float], ctx: ContextWindow, sentences: List[str]) -> WriterSentence:
         generated: List[Token] = []
         grammar = True
 
         for _ in range(self.max_tokens):
-            proposal = self.propose_token(ModelInput(ctx, sequence, line, grammar))
+            proposal = self.propose_token(ModelInput(ctx, sequence, grammar))
             if proposal is None:
                 break
-            generated.append(proposal)
-            ctx.add_token(proposal)
+            token = self.token_dictionary.add_and_get(proposal.text)
+            generated.append(token)
+            ctx.add_token(token)
             
-            if proposal == Token.EOL:
+            if proposal.is_eol():
                 if self.environment.grammar.basic_validate_grammar_tokens(generated):
                     natural = self.environment.grammar.convert_from_canonical_tokens(generated)
                     if self.environment.semantic.validate(sentences, natural):        
-                        return WriterSentence(generated, natural, line)
+                        return WriterSentence(generated, natural)
                 return None # sentence failed quality check
             
             grammar = not grammar or proposal.is_terminal()
 
         # close unfinished line in context
-        ctx.add_token(Token.EOL)
+        eol = self.token_dictionary.add_and_get(Token.EOL.text)
+        ctx.add_token(eol)
         return None
 
     def generate_sentence_beam_search(
-        self, sequence: List[float], line: float, ctx: ContextWindow,
+        self, sequence: List[float], ctx: ContextWindow,
         keyword_scores: dict, used_tokens: set, sentences: List[str]
     ) -> WriterSentence:
 
@@ -329,7 +299,6 @@ class WriterAgent:
                 self.eol = self.tokens[-1].is_eol() if self.tokens else False
 
         # --- config parameters ---
-        top_k = self.environment.configuration.top_k
         temperature = self.environment.configuration.temperature 
         alpha = self.environment.configuration.beam_alpha         
         jitter_amp = self.environment.configuration.beam_jitter
@@ -353,14 +322,15 @@ class WriterAgent:
                     new_beams.append(beam)
                     continue
 
-                outputs: List[TokenLogit] = self.paged_network.propose(
-                    ModelInput(beam.ctx, sequence, line, beam.grammar)
+                outputs: List[TokenLogit] = self.glp_network.propose(
+                    ModelInput(beam.ctx, sequence, beam.grammar)
                 )
 
                 if not outputs:
                     continue
 
                 # --- top-k selection ---
+                top_k = self.environment.configuration.get_top_k(beam.grammar)
                 candidates = outputs[:top_k]
 
                 # --- softmax over logits ---
@@ -371,6 +341,7 @@ class WriterAgent:
 
                 for idx, logit in enumerate(candidates):
                     tok = logit.token
+                    tok = self.token_dictionary.add_and_get(tok.text)
 
                     # fork context
                     new_ctx = beam.ctx.copy_current()
@@ -404,15 +375,15 @@ class WriterAgent:
 
                     # evaluate the new full sentence 
                     if new_beam.eol:
-                        if best_sentence == None or new_beam.score >= best_score:
+                        if best_sentence is None or new_beam.score >= best_score:
+                            # validate canonical tokens (dictionary tokens zijn ok)
                             if not self.environment.grammar.basic_validate_grammar_tokens(new_tokens):
-                                continue # ignore invalid beam
+                                continue
                             natural = self.environment.grammar.convert_from_canonical_tokens(new_tokens)
                             if not self.environment.semantic.validate(sentences, natural):
                                 continue
-                            # a new validated best beam is found
-                            best_sentence = WriterSentence(new_tokens, natural, line)
-                            best_score = score
+                            best_sentence = WriterSentence(new_tokens, natural)
+                            best_score = new_beam.score
 
                     new_beams.append(new_beam)
 
@@ -431,12 +402,6 @@ class WriterAgent:
         print("X", end="")
         return []
 
-    def evaluate_context(self, before_ctx: List[float], ctx: ContextWindow) -> float:
-        if self.evaluator == None:
-            return 1.0
-        else:
-            return self.evaluator.evaluate(before_ctx, ctx)
-
     def fix_story(self, story: WriterStory):
         for sentence in story.sentences:
             sentence.fixed = self.environment.grammar.fix_grammar(sentence.natural) 
@@ -452,8 +417,9 @@ class WriterAgent:
             while True:
                 # fill up whole context with prompt
                 for prompt_line in prompt:
-                    tokens = self.environment.grammar.convert_to_canonical_tokens(prompt_line)
-                    encoded = self.sentence_encoder.encode_sentence(tokens)
+                    raw_tokens = self.environment.grammar.convert_to_canonical_tokens(prompt_line)
+                    tokens = [self.token_dictionary.add_and_get(t.text) for t in raw_tokens]
+                    encoded = self.environment.sentence_encoder.encode_sentence(tokens)
                     ctx.add_sentence(encoded)
                     ctx.update_narrative_memory(tokens)
                 if ctx.is_filled():
@@ -472,13 +438,9 @@ class WriterAgent:
         beam_attempts = self.configuration.beam_attempts
         for i in range(self.environment.configuration.max_attempts):
             ctx.clear_current_sentence()
-            if lines == 1:
-                line = 1
-            else:
-                line = index / (lines - 1)
- 
+            
             if beam_search and beam_attempts > 0 and keywords != None:
-                sentence = self.generate_sentence_beam_search(sequence_embedding, line, ctx, keyword_scores, used_tokens, sentences)
+                sentence = self.generate_sentence_beam_search(sequence_embedding, ctx, keyword_scores, used_tokens, sentences)
                 if not sentence:
                     beam_attempts -= 1
                     continue
@@ -487,7 +449,7 @@ class WriterAgent:
                     if token.text in keyword_scores:
                         keyword_scores[token.text] = keyword_scores[token.text] * 0.9                
             else:
-                sentence = self.generate_sentence(sequence_embedding, line, ctx, sentences)
+                sentence = self.generate_sentence(sequence_embedding, ctx, sentences)
                 if not sentence:
                     continue
         

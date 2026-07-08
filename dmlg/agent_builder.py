@@ -12,7 +12,7 @@ from .sentence_encoder import SentenceEncoder
 from .curriculum import Curriculum
 from .tokens import TokenPage
 
-DATA_FOLDER: str = "../triadic-data/toy-system-v3/"
+DATA_FOLDER: str = "../triadic-data/toy-system-v4/"
 MODEL_FILENAME: str = "_model.bin"
 TOKENS_FILENAME: str = "_tokens.txt"
 OUTPUT_FILENAME: str = "_output.txt"

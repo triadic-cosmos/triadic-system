@@ -7,8 +7,8 @@ from engine.triadic_llm import TriadicLLM
 import time
 
 # Parameters
-MIN_CHAPTERS = 42
-MAX_CHAPTERS = 48
+MIN_CHAPTERS = 15
+MAX_CHAPTERS = 20
 RETRIES = 2
 
 # Comedy sequential book parameters
@@ -54,6 +54,23 @@ HYDE_PARAMS = TriadicNarratorParams(
     False
 )
 
+# Honeymoon sequential book parameters
+HONEYMOON_PARAMS = TriadicNarratorParams(
+    "alice",
+    None,
+    ("Combine this into an amazing space adventure of a man called Lenox and his bride Seraphina. "
+     "Only Lenox and Seraphina appear as human characters. "
+     "Do not name or describe any other humans. "
+     "Polish the semantics where needed."),
+    "Link the two sequences maintaining the space adventure theme. Be creative if necessary.",
+    "This is a book about a space adventure of a couple on honeymoon.",
+    "alice",
+    "30k",
+    {"orbit","vessel","star","planet","surface","valley","shadow","light","cluster","current","void","wind","look","travel","drift","approach","observe","float","follow","rise","touch","reach","join","meet","embrace"},
+    85,
+    False
+)
+
 # Create writer
 def create_writer(name: str, prefix: str) -> TriadicWriter:    
     return TriadicWriter(name, prefix, 20)
@@ -92,5 +109,5 @@ def write_sequential_book(params: TriadicNarratorParams, min_chapters: int, max_
 
 # Main
 start = time.perf_counter()
-write_sequential_book(HYDE_PARAMS, MIN_CHAPTERS, MAX_CHAPTERS, RETRIES)
+write_sequential_book(HONEYMOON_PARAMS, MIN_CHAPTERS, MAX_CHAPTERS, RETRIES)
 print(f"Elapsed time : {time.perf_counter() - start:.1f} s")

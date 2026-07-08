@@ -68,8 +68,8 @@ from .curriculum import (
 # --- Neural / Network -----------------------------------------------------
 
 from .neural import NeuralNetwork
-from .paged_network import (
-    PagedNetwork,
+from .glp_network import (
+    GlpNetwork,
     TrainingBatch,
 )
 
@@ -116,6 +116,6 @@ __all__ = [
 
     # Neural / Network
     "NeuralNetwork",
-    "PagedNetwork",
+    "GlpNetwork",
     "TrainingBatch",
 ]

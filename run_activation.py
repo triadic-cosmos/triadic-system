@@ -14,10 +14,10 @@ from dmlg import (
     SentenceEncoder
 )
 
-DATA_FOLDER = "../triadic-data/toy-system-v3/"
+DATA_FOLDER = "../triadic-data/toy-system-v4/"
 MODEL_FILENAME = "_model.bin"
-MODEL_PREFIXES = ["15k", "50k"]
-MODEL_NAME = "hyde-mix"
+MODEL_PREFIXES = ["30k"]
+MODEL_NAME = "alice"
 
 def load_agent(name:str, prefix: str) -> WriterAgent:
     return WriterAgent.load(environment, DATA_FOLDER + name + "/" + prefix + MODEL_FILENAME)  
@@ -65,10 +65,14 @@ with torch.no_grad():
     plt.plot(x_act.cpu(), y_default, label="SiLU")
     
     for i, agent in enumerate(agents):
-        f_activation = agent.activation_mlp.to(device)
-        y_activation = f_activation(x_act).cpu()
-        plt.plot(x_act.cpu(), y_activation, label=MODEL_PREFIXES[i])
+        gf_activation = agent.glp_network.grammar_activation.to(device)
+        gy_activation = gf_activation(x_act).cpu()
+        plt.plot(x_act.cpu(), gy_activation, label="G:" + MODEL_PREFIXES[i])
+        
+        lf_activation = agent.glp_network.lemma_activation.to(device)
+        ly_activation = lf_activation(x_act).cpu()
+        plt.plot(x_act.cpu(), ly_activation, label="L:" + MODEL_PREFIXES[i])
 
-    plt.title("Generator Learned Activation Function")
+    plt.title("Learned Activation Function")
     plt.legend()
     plt.show()

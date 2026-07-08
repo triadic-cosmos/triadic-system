@@ -82,7 +82,7 @@ class ContextWindow:
         return self._sentences[len(self._sentences) - 1] != EMPTY_SENTENCE
 
     def copy_current(self) -> "ContextWindow":
-        ctx: ContextWindow = ContextWindow(Configuration)
+        ctx: ContextWindow = ContextWindow(self.configuration)
         ctx._position = self._position
         ctx._current_embedding = self._current_embedding.copy()
         ctx._last_token = self._last_token
@@ -100,7 +100,7 @@ class ContextWindow:
 
     def get_current_embedding(self) -> List[float]:
         cur_pos: float = self._position / self._last_position
-        return [cur_pos] + self._current_embedding + self._forelast_token.large_embedding + self._last_token.large_embedding
+        return [cur_pos] + self._current_embedding
     
     def get_generator_history_embedding(self) -> List[float]:
         if self._generator_history_embedding == None:
@@ -132,7 +132,6 @@ def get_history_embedding(sentences: List[EncodedSentence], amounts: List[int]) 
 class ModelInput:
     window: ContextWindow
     sequence_embedding: List[float]
-    line: float
     grammar: bool
 
 
@@ -144,7 +143,7 @@ class ModelInput:
 class InputEncoder:
     def encode(self, model_input: ModelInput) -> List[float]:
         """
-        Final input vector = [history] + [current] + [sequence] + [input line]
+        Final input vector = [history] + [current] + [narrative] + [sequence]
         """
         window = model_input.window
 
@@ -160,8 +159,5 @@ class InputEncoder:
         # 4. Sequence embedding
         sequence_embedding = model_input.sequence_embedding
 
-        # 5. Input line
-        input_line = [model_input.line]
-
-        # 6. Concatenate
-        return history_embedding + current_embedding + narrative_embedding + sequence_embedding + input_line
+        # 5. Concatenate
+        return history_embedding + current_embedding + narrative_embedding + sequence_embedding

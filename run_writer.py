@@ -8,8 +8,8 @@ start = time.perf_counter()
 
 print("Generating stories...")
 
-model = "hyde-mix"
-prefix = "15k"
+model = "alice"
+prefix = "30k"
 number_lines = 15
 number_stories = 10
 beam_search = False
