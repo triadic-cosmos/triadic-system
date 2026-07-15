@@ -7,9 +7,11 @@ from engine.triadic_llm import TriadicLLM
 import time
 
 # Parameters
-MIN_CHAPTERS = 15
+MIN_CHAPTERS = 3
 MAX_CHAPTERS = 20
-RETRIES = 2
+CANDIDATES = 5
+MIN_LINES = 10
+RETRIES = 10
 
 # Comedy sequential book parameters
 COMEDY_PARAMS = TriadicNarratorParams(
@@ -71,6 +73,23 @@ HONEYMOON_PARAMS = TriadicNarratorParams(
     False
 )
 
+# Incremental book parameters
+INCREMENTAL_PARAMS = TriadicNarratorParams(
+    "alice",
+    None,
+    ("Rework this draft material into a coherent story, a literary masterpiece. "
+    "Make sure there is proper and exciting narrative arc. "
+    "Keep all story elements related and realistic. "
+    "A male main character is called Marvin and a female main character is called Alice. "),
+    "Link the sequences maintaining their common theme. Be creative if necessary. Keep as short as possible. ",
+    None,
+    "alice",
+    "30k",
+    {},
+    85,
+    False
+)
+
 # Create writer
 def create_writer(name: str, prefix: str) -> TriadicWriter:    
     return TriadicWriter(name, prefix, 20)
@@ -95,19 +114,25 @@ def distill_dmlg(model: str, prefix: str, stories: int):
     distiller: TriadicDistiller = TriadicDistiller(llm, writer)
     distiller.distill_dmlg(stories)
 
-# Write a full book with the trained agents
-def write_book(params: TriadicNarratorParams, chapters: int, retries: int):
+# Write a full book with the trained agent
+def write_book(params: TriadicNarratorParams):
     llm: TriadicLLM = TriadicLLM()
     narrator: TriadicNarrator = TriadicNarrator(llm, params)
-    narrator.write_book(chapters, retries)
+    narrator.write_book(MIN_CHAPTERS, RETRIES)
 
-# Write a sequential narrative book with the trained agents
-def write_sequential_book(params: TriadicNarratorParams, min_chapters: int, max_chapters: int, retries: int):
+# Write a sequential narrative book with the trained agent
+def write_sequential_book(params: TriadicNarratorParams):
     llm: TriadicLLM = TriadicLLM()
     narrator: TriadicNarrator = TriadicNarrator(llm, params)
-    narrator.write_sequential_book(min_chapters, max_chapters, retries)
+    narrator.write_sequential_book(MIN_CHAPTERS, MAX_CHAPTERS, RETRIES)
+
+# Write an incremental story book with the trained agent
+def write_incremental_book(params: TriadicNarratorParams):
+    llm: TriadicLLM = TriadicLLM()
+    narrator: TriadicNarrator = TriadicNarrator(llm, params)
+    narrator.write_incremental_book(MIN_CHAPTERS, CANDIDATES, MIN_LINES, RETRIES)
 
 # Main
 start = time.perf_counter()
-write_sequential_book(HONEYMOON_PARAMS, MIN_CHAPTERS, MAX_CHAPTERS, RETRIES)
+write_incremental_book(INCREMENTAL_PARAMS)
 print(f"Elapsed time : {time.perf_counter() - start:.1f} s")

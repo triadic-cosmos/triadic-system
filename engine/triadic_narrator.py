@@ -13,6 +13,7 @@ from dmlg import (
     GrammarEngine,
     SemanticEngine,
     WriterStory,
+    WriterSentence,
     WriterAgent,
     Curriculum,
     CurriculumStory,
@@ -76,7 +77,7 @@ END_PROMPT = \
 "Stop after the validation. The title is: $TITLE\nThe sequence to check is: "
 
 CURRICULUM = "book"
-MAX_TOKENS = 2000
+MAX_TOKENS = 5000
 MIN_LINES = 7
 MAX_LINES = 30
 GEN_STORY_LINES = 15
@@ -205,6 +206,12 @@ class TriadicNarratorChapter:
     raw_story: WriterStory
     moderated_story: List[str]
     score: int
+ 
+    def to_writer_story(self) -> WriterStory:
+        story_sentences = []
+        for sentence in self.moderated_story:
+            story_sentences.append(WriterSentence([], sentence))
+        return WriterStory(story_sentences)
 
 # Narrator
 @dataclass
@@ -468,6 +475,137 @@ class TriadicNarrator:
                 # Determine new the keyword set
                 keywords = self.determine_keywords(chapter, keywords)
 
+    def write_incremental_chapter(self, nr_candidates: int, nr_lines: int, keywords: set[str]) -> TriadicNarratorChapter:
+        sequence_embedding = self.agent.choose_best_embedding(keywords)
+        sentences: List[str] = []
+
+        while len(sentences) < nr_lines:
+            # Create candidate sentences
+            candidates = []
+            while len(candidates) < nr_candidates:
+                sentence: WriterSentence = self.agent.generate_sentence(
+                    sequence_embedding, self.ctx.copy_current(), sentences)
+                if sentence and ends_with_punctuation(sentence.natural):                    
+                    candidates.append(sentence.natural)
+                    print(f"{len(candidates)}. {sentence.natural}")
+            
+            # Select best candidate
+            best = candidates[0]
+            for index in range(1, len(candidates)):
+                if len(candidates[index]) > len(best):
+                    best = candidates[index]
+            
+            # Add sentence to chapter
+            fixed: str = self.environment.grammar.fix_grammar(best)            
+            sentences.append(fixed)
+            self.add_to_context(fixed)                
+            print(f"lines = {len(sentences)} : {fixed}")
+            
+        return TriadicNarratorChapter("Short Story", None, sentences, 100)
+
+    def write_remastered_chapter(self, chapter: TriadicNarratorChapter, retries: int) -> TriadicNarratorChapter:
+        fix_prompt = FIX_PROMPT.replace("$CUSTOM", self.params.fix_custom)
+        current_story: WriterStory = chapter.to_writer_story()
+        current_score: int = self.params.min_score - 20
+        empty_count: int = 0
+
+        for index in range(1, retries + 1):
+            # Remaster the combined generated chapters
+            moderated: List[str] = self.llm.moderate(fix_prompt, f"REMASTER-{index}", current_story, MAX_TOKENS)
+            if len(moderated) == 0:
+                empty_count += 1
+                if empty_count >= 3:
+                    print("Moderation of chapter is aborted!")
+                    return None
+                continue
+            if len(moderated) <= len(current_story.sentences) / 2 or not check_no_repetition(moderated):
+                continue
+            
+            # Determine title, this is mandatory                
+            title = self.llm.generate_title(moderated, MAX_TOKENS)
+            title = title.replace('"', "")                
+            if title == "Untitled":
+                continue
+
+            # Determine score
+            score = self.llm.score(moderated, title, MAX_TOKENS)
+            print(f"Moderated chapter has score {score} and title {title}")
+            chapter: TriadicNarratorChapter = TriadicNarratorChapter(title, None, moderated, score)
+            if score >= self.params.min_score:        
+                # Story is accepted as candidate
+                return chapter
+            if score >= current_score:
+                # Use the better story as new moderation source
+                current_story = chapter.to_writer_story()
+                current_score = score
+        
+        # No remaster found within amount of tries with a high enough score
+        print("Moderation of chapter has failed!")
+        return None
+
+    def write_incremental_book(self, nr_chapters: int, nr_candidates: int, nr_lines: int, retries: int):
+        total_chapters = 0
+        output_filename = self.builder.curriculum_filename(self.environment, self.params.name)
+        keywords: set[str] = self.agent.filter_keywords(self.params.keywords)
+        print(f"keywords = {','.join(keywords)}")
+        
+        with open(output_filename, "a", encoding='utf-8-sig') as file:
+            while True:
+                # Reset context before each chapter
+                self.ctx = ContextWindow(self.configuration)
+                
+                # Create incremental small chapters
+                chapters: List[TriadicNarratorChapter] = []
+                while True:
+                    chapter: TriadicNarratorChapter = self.write_incremental_chapter(
+                        nr_candidates, nr_lines, keywords)
+                    chapters.append(chapter)
+                    print(f"chapters = {len(chapters)}")
+                    if len(chapters) >= nr_chapters:
+                        break
+                    keywords = self.determine_keywords(chapter, keywords)
+
+                # Remaster incremental chapters and create bridges
+                sentences = []
+                previous_chapter = None
+                remastered_chapters = []
+                for chapter in chapters:
+                    remastered_chapter = self.write_remastered_chapter(chapter, retries)
+                    if remastered_chapter:
+                        if previous_chapter:
+                            transition = self.bridge_chapters(previous_chapter, remastered_chapter)
+                            if check_no_repetition(transition):
+                                # reduce length of transition to maximum 10 lines
+                                if len(transition) > 10:
+                                    sentences += transition[:5]
+                                    sentences += transition[-5:]
+                                else:
+                                    sentences += transition
+                        sentences += remastered_chapter.moderated_story 
+                        previous_chapter = remastered_chapter
+                full_chapter: TriadicNarratorChapter = TriadicNarratorChapter( \
+                    chapters[0].title, None, sentences, chapters[0].score)
+                print(f"remastered lines = {len(sentences)}")
+    
+                # Create remastered full chapter
+                remastered: TriadicNarratorChapter = self.write_remastered_chapter(full_chapter, retries)
+                if not remastered:
+                    continue
+
+                # Write remastered full chapter
+                file.write(f"\\section{{{remastered.title}}}\n\n")
+                for line in remastered.moderated_story:
+                    file.write(line + "\n")
+                file.write("\n\n")
+                file.flush()
+                
+                total_chapters += 1
+                print(f">>> finished chapters = {total_chapters} <<<")
+
+
+# ----- HELPERS -----
+def ends_with_punctuation(line: str) -> bool:
+    return line.rstrip().endswith(('.', '?', '!'))
 
 def extract_keywords(text: str) -> set[str] | None:
     """
