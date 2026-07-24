@@ -8,9 +8,9 @@ start = time.perf_counter()
 
 print("Generating stories...")
 
-model = "alice"
-prefix = "30k"
-number_lines = 15
+model = "mars"
+prefix = "50k"
+number_lines = 20
 number_stories = 10
 beam_search = False
 keywords = {}

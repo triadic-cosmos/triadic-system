@@ -77,7 +77,7 @@ END_PROMPT = \
 "Stop after the validation. The title is: $TITLE\nThe sequence to check is: "
 
 CURRICULUM = "book"
-MAX_TOKENS = 5000
+MAX_TOKENS = 3000
 MIN_LINES = 7
 MAX_LINES = 30
 GEN_STORY_LINES = 15
@@ -518,7 +518,11 @@ class TriadicNarrator:
                     print("Moderation of chapter is aborted!")
                     return None
                 continue
-            if len(moderated) <= len(current_story.sentences) / 2 or not check_no_repetition(moderated):
+            
+            # Quality check of remastered chapter
+            if len(moderated) <= len(current_story.sentences) / 2 or \
+               len(moderated) >= len(current_story.sentences) * 1.5 or \
+               not check_no_repetition(moderated):
                 continue
             
             # Determine title, this is mandatory                
@@ -543,7 +547,7 @@ class TriadicNarrator:
         print("Moderation of chapter has failed!")
         return None
 
-    def write_incremental_book(self, nr_chapters: int, nr_candidates: int, nr_lines: int, retries: int):
+    def write_incremental_book(self, nr_chapters: int, nr_candidates: int, nr_lines: int, retries: int, skip_intermediate: bool = True):
         total_chapters = 0
         output_filename = self.builder.curriculum_filename(self.environment, self.params.name)
         keywords: set[str] = self.agent.filter_keywords(self.params.keywords)
@@ -570,9 +574,13 @@ class TriadicNarrator:
                 previous_chapter = None
                 remastered_chapters = []
                 for chapter in chapters:
-                    remastered_chapter = self.write_remastered_chapter(chapter, retries)
+                    if skip_intermediate:
+                        # no intermediate remastering
+                        remastered_chapter = chapter 
+                    else:
+                        remastered_chapter = self.write_remastered_chapter(chapter, retries)
                     if remastered_chapter:
-                        if previous_chapter:
+                        if previous_chapter and not skip_intermediate:
                             transition = self.bridge_chapters(previous_chapter, remastered_chapter)
                             if check_no_repetition(transition):
                                 # reduce length of transition to maximum 10 lines

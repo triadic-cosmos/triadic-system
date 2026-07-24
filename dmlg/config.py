@@ -2,8 +2,6 @@
 from dataclasses import dataclass, field
 from typing import List
 
-from .tokens import TokenCodeBook
-
 @dataclass
 class Configuration:
     name: str
@@ -11,10 +9,13 @@ class Configuration:
     grammar_hidden_size: int = 256
     lemma_hidden_size: int = 1024
     activation_hidden_size: int = 64
-    bits_dimension: int = 16
-    triple_dimension: int = 75
     grammar_dimension: int = 27
-    total_pages: int = 309
+    lemma_dimension: int = 256
+    total_pages: int = 256
+    # learnable lemma embedding rate
+    learn_alpha: float = 0.1
+    alpha_damping: float = 10
+    max_alpha_transitions: int = 5_000_000
     # context
     generator_history_sentences = [5, 15]
     context_max_sentences = 80
@@ -44,12 +45,6 @@ class Configuration:
     beam_jitter: float = 0.1
     beam_attempts: int = 3
 
-    # code book for output encoding
-    codebook: TokenCodeBook = field(init=False)
-    
-    def __post_init__(self):
-        self.codebook = TokenCodeBook(self.triple_dimension)
-
     def generator_history_context_size(self) -> int:
         return self.generator_history_sentences[0] * 24 + self.generator_history_sentences[1] * 12
 
@@ -58,7 +53,7 @@ class Configuration:
         return self.generator_history_context_size() + self.content_max_lemmas + 137
     
     def generator_output_size(self) -> int:
-        return self.bits_dimension + self.triple_dimension + self.total_pages
+        return self.total_pages + self.lemma_dimension
 
     def get_top_k(self, grammar: bool) -> float:
         if grammar:

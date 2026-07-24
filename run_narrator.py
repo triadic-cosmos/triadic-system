@@ -7,10 +7,10 @@ from engine.triadic_llm import TriadicLLM
 import time
 
 # Parameters
-MIN_CHAPTERS = 3
+MIN_CHAPTERS = 4
 MAX_CHAPTERS = 20
 CANDIDATES = 5
-MIN_LINES = 10
+MIN_LINES = 15
 RETRIES = 10
 
 # Comedy sequential book parameters
@@ -75,16 +75,16 @@ HONEYMOON_PARAMS = TriadicNarratorParams(
 
 # Incremental book parameters
 INCREMENTAL_PARAMS = TriadicNarratorParams(
-    "alice",
+    "mars",
     None,
     ("Rework this draft material into a coherent story, a literary masterpiece. "
     "Make sure there is proper and exciting narrative arc. "
-    "Keep all story elements related and realistic. "
+    "Keep all story elements related and realistic. Fill the gaps. "
     "A male main character is called Marvin and a female main character is called Alice. "),
-    "Link the sequences maintaining their common theme. Be creative if necessary. Keep as short as possible. ",
+    "Link the sequences maintaining their common theme. Be creative if necessary. ",
     None,
-    "alice",
-    "30k",
+    "mars",
+    "50k",
     {},
     85,
     False

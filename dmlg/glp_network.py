@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from uuid import uuid4
 
 from .config import Configuration
-from .tokens import Token, TokenPage, TokenLogit, TokenDictionary, LemmaGrammarDictionary, GRAMMAR_TOKENS
+from .tokens import Token, TokenPage, TokenLogit, TokenDictionary, LemmaGrammarDictionary, LemmaEmbeddingDictionary, GRAMMAR_TOKENS
 from .context import ModelInput, InputEncoder
 from .neural import NeuralNetwork, ActivationMLP
 
@@ -47,6 +47,8 @@ class GlpNetwork:
     grammar_tokens: List[Token] = field(init=False)
     lemma_grammar_dict: LemmaGrammarDictionary = field(init=False)
 
+    lemma_embedding_dict: LemmaEmbeddingDictionary = field(init=False)
+
     # paging structure remains
     page_list: List[TokenPage] = field(default_factory=list)
     pages: dict = field(default_factory=dict)
@@ -55,6 +57,8 @@ class GlpNetwork:
         self.encoder = InputEncoder()
         self._create_grammar_network()
         self._create_lemma_network()
+        
+        self.lemma_embedding_dict = LemmaEmbeddingDictionary(self.configuration.lemma_dimension)
 
         self.grammar_tokens = [self.token_dictionary.map[text] for text in GRAMMAR_TOKENS]
         self.lemma_grammar_dict = LemmaGrammarDictionary()
@@ -144,6 +148,8 @@ class GlpNetwork:
 
         if lemma_samples:
             self._learn_lemma(lemma_samples)
+            alpha = self._current_alpha(batch.training_count)
+            self._update_lemma_embeddings_after_batch(lemma_samples, alpha)
 
     # --------------------------------------------------------
     # Grammar learning
@@ -169,57 +175,77 @@ class GlpNetwork:
         pred = self.lemma_network(xs)
 
         # split output vector
-        bits_dim = self.configuration.bits_dimension
-        tri_dim = self.configuration.triple_dimension
+        lemma_dim = self.configuration.lemma_dimension
+        page_dim = self.configuration.total_pages
 
-        bits_pred = pred[:, :bits_dim]
-        tri_pred = pred[:, bits_dim:bits_dim+tri_dim]
-        page_pred = pred[:, bits_dim+tri_dim:]
+        embedding_pred = pred[:, :lemma_dim] # learnable embedding prediction
+        page_pred = pred[:, lemma_dim:lemma_dim+page_dim]  # page one-hot logits
 
         # targets
-        bit_targets = []
-        tri_targets = []
+        embedding_targets = []
         page_targets = []
 
         for s in samples:
-            idx = s.target.lemma_index
+            # 1. lemma embedding target
+            lemma_emb = self.lemma_embedding_dict.get_embedding(s.target)
+            embedding_targets.append(lemma_emb.embedding)
 
-            # 1. bits
-            bits = [(idx >> i) & 1 for i in range(bits_dim)]
-            bit_targets.append(bits)
-
-            # 2. tri-hot
-            tri_bits = self.configuration.codebook.get_bits(idx)
-            tri_vec = [0.0] * tri_dim
-            for b in tri_bits:
-                tri_vec[b] = 1.0
-            tri_targets.append(tri_vec)
-
-            # 3. page
-            prev = s.prev_lemma
-            page = self.pages.get(prev)
-
+            # 2. page one-hot target
+            page = self.pages.get(s.prev_lemma)
             if page is None:
-                page_idx = 0   # fallback
+                page_idx = 0
             else:
                 page_idx = self.page_list.index(page)
 
             page_targets.append(page_idx)
 
-        bit_targets = torch.tensor(bit_targets, dtype=torch.float32)
-        tri_targets = torch.tensor(tri_targets, dtype=torch.float32)
+        embedding_targets = torch.tensor(embedding_targets, dtype=torch.float32)
         page_targets = torch.tensor(page_targets, dtype=torch.long)
 
+        # normalize predicted embeddings
+        embedding_pred = F.normalize(embedding_pred, p=2, dim=1)
+        embedding_targets = F.normalize(embedding_targets, p=2, dim=1)
+
         # losses
-        loss_bits = F.mse_loss(bits_pred, bit_targets)
-        loss_tri = F.mse_loss(tri_pred, tri_targets)
+        loss_embedding = 1.0 - F.cosine_similarity(embedding_pred, embedding_targets).mean()
         loss_page = F.cross_entropy(page_pred, page_targets)
 
-        loss = loss_bits + loss_tri + loss_page
+        loss = loss_embedding + loss_page
 
         self.lemma_network.opt.zero_grad()
         loss.backward()
         self.lemma_network.opt.step()
+
+    # reduce alpha to train embeddings in function of number of epochs
+    def _current_alpha(self, training_count: int) -> float:
+        alpha_max = self.configuration.learn_alpha
+        alpha_min = alpha_max / self.configuration.alpha_damping
+        T = self.configuration.max_alpha_transitions
+
+        if training_count >= T:
+            return alpha_min
+
+        factor = 1.0 - (training_count / T)  # from 1 to 0
+        return alpha_min + (alpha_max - alpha_min) * factor
+
+    def _update_lemma_embeddings_after_batch(self, samples: List[TrainingSample], alpha: float):
+        for s in samples:
+            # 1. Run inference to get model embedding prediction
+            x = torch.tensor([s.input_vector], dtype=torch.float32)
+            with torch.no_grad():
+                pred = self.lemma_network(x).squeeze(0)
+
+            lemma_dim = self.configuration.lemma_dimension
+            embedding_pred = pred[:lemma_dim]
+
+            # normalize predicted embedding
+            embedding_pred = F.normalize(embedding_pred, p=2, dim=0)
+
+            # 2. Get the learnable embedding object
+            lemma_emb = self.lemma_embedding_dict.get_embedding(s.target)
+
+            # 3. Apply alpha‑mix update
+            lemma_emb.update(embedding_pred.tolist(), alpha)
 
     # --------------------------------------------------------
     # Inference
@@ -262,15 +288,20 @@ class GlpNetwork:
         with torch.no_grad():
             pred = self.lemma_network(x).squeeze(0)
 
-        bits_dim = self.configuration.bits_dimension
-        tri_dim = self.configuration.triple_dimension
-
-        bits_pred = pred[:bits_dim]
-        tri_pred = pred[bits_dim:bits_dim+tri_dim]
-        page_pred = pred[bits_dim+tri_dim:]
+        lemma_dim = self.configuration.lemma_dimension
+        page_dim = self.configuration.total_pages
 
         # ------------------------------------------------------------
-        # 1. Sort pages with logit
+        # 1. Split output: embedding + page logits
+        # ------------------------------------------------------------
+        embedding_pred = pred[:lemma_dim]
+        page_pred = pred[lemma_dim:lemma_dim+page_dim]
+
+        # normalize model embedding
+        embedding_pred = F.normalize(embedding_pred, p=2, dim=0)
+
+        # ------------------------------------------------------------
+        # 2. Sort pages by logit
         # ------------------------------------------------------------
         page_scores = [(i, float(page_pred[i])) for i in range(len(self.page_list))]
         page_scores.sort(key=lambda t: t[1], reverse=True)
@@ -278,59 +309,42 @@ class GlpNetwork:
         grammar_index = model_input.window.last_token().grammar_index
 
         # ------------------------------------------------------------
-        # 2. Iterate pages in order
+        # 3. Iterate pages in descending score order
         # ------------------------------------------------------------
-        for page_idx, _ in page_scores:
+        for page_idx, page_logit in page_scores:
             page = self.page_list[page_idx]
-
             logits = []
 
             # ------------------------------------------------------------
-            # 3. Find valid lemmas
+            # 4. Evaluate tokens in this page
             # ------------------------------------------------------------
             for tok in page.output_tokens:
                 idx = tok.lemma_index
 
-                # check compatibility with grammar
+                # grammar compatibility filter
                 if grammar_index is not None:
                     if not self.lemma_grammar_dict.is_compatible(idx, grammar_index):
                         continue
 
-                # check individual bits
-                invalid_bits = 0
-                for i in range(bits_dim):
-                    expected = (idx >> i) & 1
-                    predicted = bits_pred[i]
-                    if expected == 0:
-                        if predicted > 0.6:
-                            invalid_bits += 1
-                    elif predicted < 0.4:
-                        invalid_bits += 1
-                    
-                # check if there are too many invalid bits
-                if invalid_bits > 3:
-                    continue
+                # get lemma embedding
+                lemma_emb = self.lemma_embedding_dict.get_embedding(tok)
+                emb = torch.tensor(lemma_emb.embedding, dtype=torch.float32)
+                emb = F.normalize(emb, p=2, dim=0)
 
-                # logit = average tri-hot activation
-                tri_bits = self.configuration.codebook.get_bits(idx)
-                invalid_tribits = 0
-                for b in tri_bits:
-                    if tri_pred[b] < 0.1:
-                        invalid_tribits += 1
-                if invalid_tribits >= 2:
-                    continue 
-                
-                logit = float(sum(tri_pred[b] for b in tri_bits) / len(tri_bits))
-                logits.append(TokenLogit(tok, logit))
+                # cosine similarity
+                cos = float(torch.dot(embedding_pred, emb))
+
+                # final score = cosine similarity (page already sorted)
+                logits.append(TokenLogit(tok, cos))
 
             # ------------------------------------------------------------
-            # 4. When page has overlap -> stop and return
+            # 5. If this page yields valid tokens → return them
             # ------------------------------------------------------------
             if logits:
                 logits.sort(key=lambda t: t.logit, reverse=True)
                 return logits
 
         # ------------------------------------------------------------
-        # 5. There are no pages found with overlap
+        # 6. No page produced valid tokens
         # ------------------------------------------------------------
         return []

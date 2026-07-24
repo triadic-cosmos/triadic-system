@@ -101,6 +101,7 @@ class WriterAgent:
     def learn_batch(self, batch: TrainingBatch):
         if len(batch.samples) == 0:
             return
+        batch.training_count = self.training_count
         self.glp_network.learn_batch(batch)
 
     # ------------------------------------------------------------

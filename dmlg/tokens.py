@@ -199,10 +199,6 @@ class TokenLogit:
 # TokenPage
 # ============================================================
 
-# ============================================================
-# TokenPage
-# ============================================================
-
 @dataclass
 class TokenPage:
     uuid: UUID
@@ -414,49 +410,41 @@ class LemmaGrammarDictionary:
     def is_compatible(self, lemma_index: int, grammar_index: int) -> bool:
         m = self.mask.get(lemma_index, 0)
         return bool(m & (1 << grammar_index))
-
+    
 # ============================================================
-# TokenCodeBook
+# LearnedTokenEmbedding
 # ============================================================
 
-class TokenCodeBook:
-    """
-    Pure tri-hot codebook:
-    - Entire output_dim is used as combinatorial space.
-    - Every token is encoded as 3 distinct bits.
-    """
+@dataclass
+class LearnedTokenEmbedding:
+    embedding: List[float]
+    dimension: int
+    
+    def update(self, target: List[float], alpha: float):
+        if len(target) != self.dimension:
+            raise Exception(f"Incompatible dimension! {dimension} != {len(target)}")
+        orig_alpha = 1.0 - alpha
+        for i in range(0, self.dimension):
+            self.embedding[i] = self.embedding[i] * orig_alpha + target[i] * alpha
+    
+    @staticmethod
+    def create(token: Token, dimension: int) -> "LearnedTokenEmbedding":
+        embedding = token._compute_embedding(token._id, dimension)
+        return LearnedTokenEmbedding(embedding, dimension)
+    
+# ============================================================
+# LemmaEmbeddingDictionary
+# ============================================================
 
-    def __init__(self, output_dim: int = 75, max_tokens: int = 65536):
-        self.output_dim = output_dim
-        self.max_tokens = max_tokens
-
-        # tri-hot region is now the entire output space
-        self.combo_dim = output_dim
-
-        # Precompute all tri-hot combinations
-        self._triple_codes = []
-        for i in range(self.combo_dim):
-            for j in range(i + 1, self.combo_dim):
-                for k in range(j + 1, self.combo_dim):
-                    self._triple_codes.append((i, j, k))
-
-        if max_tokens > len(self._triple_codes):
-            raise ValueError(
-                f"Not enough tri-hot codes: need {max_tokens}, have {len(self._triple_codes)}"
-            )
-
-    def get_bits(self, index: int):
-        """
-        Return the 3 bit positions for this token.
-        """
-        i, j, k = self._triple_codes[index]
-        return [i, j, k]
-
-    def get_vector(self, index: int):
-        """
-        Return a float vector with 3 ones.
-        """
-        vec = [0.0] * self.output_dim
-        for pos in self.get_bits(index):
-            vec[pos] = 1.0
-        return vec
+class LemmaEmbeddingDictionary:
+    def __init__(self, dimension: int):
+        self.embeddings: Dict[int, LearnedTokenEmbedding] = {}
+        self.dimension = dimension
+    
+    def get_embedding(self, lemma: Token) -> LearnedTokenEmbedding:
+        embedding = self.embeddings.get(lemma._id)
+        if embedding:
+            return embedding
+        embedding = LearnedTokenEmbedding.create(lemma, self.dimension)
+        self.embeddings[lemma._id] = embedding
+        return embedding
