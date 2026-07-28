@@ -22,7 +22,7 @@ class SemanticEngine:
         # avoid leftover control tokens
         if sentence.count("<") > 0:
             return False
-
+        
         words = self._clean(sentence)
 
         # minimum and maximum number of words

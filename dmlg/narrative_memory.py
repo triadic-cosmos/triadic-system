@@ -3,7 +3,7 @@ import math
 import numpy as np
 from typing import List, Dict
 
-from .tokens import Token 
+from .tokens import Token
 
 ACTORS = "actors"
 ACTIONS = "actions"
@@ -12,12 +12,10 @@ ATMOSPHERE = "atmosphere"
 
 class NarrativeMemory:
     """
-    Book-driven narrative memory:
+    Narrative memory using learned embeddings:
     - tracks actors / actions / moments / atmosphere
-    - maintains frequency + recency
-    - forget timers
-    - produces a 128-dim narrative state
-    - recurrent GRU-like update
+    - frequency + recency
+    - GRU-like recurrent update
     """
 
     CATEGORY_SIZES = {
@@ -27,14 +25,16 @@ class NarrativeMemory:
         ATMOSPHERE: 10,
     }
 
-    # hyperparameters for weighting
-    ALPHA = 1.0     # frequency weight
-    BETA = 1.0      # recency weight
-    GAMMA = 0.15    # recency decay
+    ALPHA = 1.0
+    BETA = 1.0
+    GAMMA = 0.15
 
-    def __init__(self):
-        # persistent state (128 floats)
-        self.state = np.zeros(128, dtype=float)
+    def __init__(self, lemma_embedding_dict, configuration):
+        self.lemma_embedding_dict = lemma_embedding_dict
+        self.configuration = configuration
+
+        # persistent narrative state
+        self.state = np.zeros(self.configuration.narrative_state_size, dtype=float)
 
         # category memories: token_text -> {embedding, count, last_seen}
         self.mem = {
@@ -45,13 +45,16 @@ class NarrativeMemory:
         }
 
         # GRU-like parameters
-        self.W_f = np.random.randn(128, 256) * 0.01
-        self.W_u = np.random.randn(128, 256) * 0.01
-        self.W_s = np.random.randn(128, 256) * 0.01
+        state = self.configuration.narrative_state_size
+        cat = self.configuration.memory_embedding_size * 4  # 4 categories
 
-        self.b_f = np.zeros(128)
-        self.b_u = np.zeros(128)
-        self.b_s = np.zeros(128)
+        self.W_f = np.random.randn(state, state + cat) * 0.01
+        self.W_u = np.random.randn(state, state + cat) * 0.01
+        self.W_s = np.random.randn(state, state + cat) * 0.01
+
+        self.b_f = np.zeros(state)
+        self.b_u = np.zeros(state)
+        self.b_s = np.zeros(state)
 
     # ------------------------------------------------------------
     # UPDATE MEMORY FROM A SENTENCE
@@ -63,40 +66,50 @@ class NarrativeMemory:
                 entry["last_seen"] += 1
 
         current_category = None
+        emb_size = self.configuration.memory_embedding_size
 
         for tok in tokens:
             t = tok.text
 
-            # 1. Grammar tokens determine category
-            if t in ["<NOUN>", "<PROPN>", "<PRON>"]:
+            # grammar tokens determine category
+            if t in ["<NOUN>", "<NOUN-PLURAL>", "<PROPN>", "<PRON>", "<PRONA>"]:
                 current_category = ACTORS
                 continue
 
-            if t in ["<VERB>", "<BASE>"]:
+            if t in [
+                "<VERB-PRESENT>",
+                "<VERB-PRESENT-1S>",
+                "<VERB-PRESENT-3S>",
+                "<VERB-PAST>",
+                "<VERB-ING>",
+                "<VERB-INGV>",
+                "<VERB-PERFECT>",
+            ]:
                 current_category = ACTIONS
                 continue
 
-            # ONLY <ADV> is a category grammar token for MOMENTS
             if t == "<ADV>":
                 current_category = MOMENTS
                 continue
 
-            # <ADJ> and <ING> define atmosphere
-            if t in ["<ADJ>", "<ING>"]:
+            if t in ["<ADJ>"]:
                 current_category = ATMOSPHERE
                 continue
 
-            # 2. If it's not a lemma, skip it (postfix tokens also land here)
+            # skip non-lemma tokens
             if not tok.is_lemma():
                 continue
 
-            # 3. Lemma token: add to memory
+            # lemma token → add to memory
             if current_category is not None:
                 key = tok.text
 
+                full_emb = self.lemma_embedding_dict.get_input_embedding(tok).embedding
+                emb = np.array(full_emb[:emb_size], dtype=float)
+
                 if key not in self.mem[current_category]:
                     self.mem[current_category][key] = {
-                        "embedding": np.array(tok.memory_embedding, dtype=float),
+                        "embedding": emb,
                         "count": 1,
                         "last_seen": 0,
                     }
@@ -104,7 +117,6 @@ class NarrativeMemory:
                     self.mem[current_category][key]["count"] += 1
                     self.mem[current_category][key]["last_seen"] = 0
 
-                # after a lemma, reset category
                 current_category = None
 
         # forget old tokens
@@ -120,24 +132,22 @@ class NarrativeMemory:
         cat_vecs = []
         for cat in [ACTORS, ACTIONS, MOMENTS, ATMOSPHERE]:
             vec = self._compute_category_vector(self.mem[cat])
-            # normalize to avoid category dominance
             norm = np.linalg.norm(vec)
             if norm > 0:
                 vec = vec / norm
             cat_vecs.append(vec)
 
-        # concatenate → 128-dim
         combined = np.concatenate(cat_vecs)
-
-        # update persistent state
         self._update_state(combined)
 
     # ------------------------------------------------------------
     # CATEGORY VECTOR
     # ------------------------------------------------------------
     def _compute_category_vector(self, entries: Dict[str, dict]):
+        size = self.configuration.memory_embedding_size
+
         if not entries:
-            return np.zeros(32)
+            return np.zeros(size)
 
         weighted = []
         weights = []
@@ -145,15 +155,13 @@ class NarrativeMemory:
         for entry in entries.values():
             count = entry["count"]
             last = entry["last_seen"]
-
             w = self.ALPHA * count + self.BETA * math.exp(-self.GAMMA * last)
-
             weighted.append(entry["embedding"] * w)
             weights.append(w)
 
         total_w = sum(weights)
         if total_w == 0:
-            return np.zeros(32)
+            return np.zeros(size)
 
         return sum(weighted) / total_w
 

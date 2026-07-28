@@ -10,14 +10,21 @@ from .tokens import Token, TokenDictionary
 from .grammar import GrammarEngine
 from .config import Configuration
 from .writer_environment import WriterEnvironment
-from .sentence_encoder import EncodedSentence
+from .sentence_encoder import SentenceEncoder, EncodedSentence
 
-@dataclass(frozen=True)
+@dataclass
 class CurriculumSentence:
     tokens: List[Token]
-    encoded: EncodedSentence
     natural: str
-    
+
+    def __post_init__(self):
+        self.encoded = None
+
+    def get_encoded(self, encoder: SentenceEncoder) -> EncodedSentence:
+        if not self.encoded:
+            self.encoded = encoder.encode_sentence(self.tokens)
+        return self.encoded
+
     def get_canonical(self) -> str:
         return " ".join([token.text for token in self.tokens])
 
@@ -56,9 +63,8 @@ class Curriculum:
                 continue         
             eol = s.replace("<COMMA> <PERIOD>", "<PERIOD>") + " <EOL>"
             tokens = [self.token_dictionary.add_and_get(t) for t in eol.split(" ") if t != ""]
-            encoded = environment.sentence_encoder.encode_sentence(tokens)
             natural = environment.grammar.convert_from_canonical(eol)
-            curriculum_sentences.append(CurriculumSentence(tokens, encoded, natural))
+            curriculum_sentences.append(CurriculumSentence(tokens, natural))
             print(f"{i}. {natural}")
             i += 1
 
@@ -127,8 +133,7 @@ class Curriculum:
                 else:                    
                     natural = environment.grammar.convert_from_canonical(line)
                     tokens = [self.token_dictionary.add_and_get(token) for token in line.split(" ") if token != ""]
-                    encoded = environment.sentence_encoder.encode_sentence(tokens)
-                    sentences.append(CurriculumSentence(tokens, encoded, natural))
+                    sentences.append(CurriculumSentence(tokens, natural))
                     
             if (len(sentences) > 0):                
                 self.stories.append(CurriculumStory(sentences))

@@ -3,6 +3,7 @@
 import torch
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import numpy as np
 
 from dmlg import (
     TokenPage,
@@ -11,21 +12,16 @@ from dmlg import (
     WriterAgent,
     Configuration,
     WriterEnvironment,
-    SentenceEncoder
+    DATA_FOLDER
 )
 
-DATA_FOLDER = "../triadic-data/toy-system-v5/"
 MODEL_FILENAME = "_model.bin"
-MODEL_PREFIXES = ["50k"]
-MODEL_NAME = "mars"
+MODEL_PREFIXES = ["30k"]
+MODEL_NAME = "blend"
 
 def load_agent(name:str, prefix: str) -> WriterAgent:
     return WriterAgent.load(environment, DATA_FOLDER + name + "/" + prefix + MODEL_FILENAME)  
     
-import torch
-import torch.nn.functional as F
-import numpy as np
-
 def is_nonlinear(x, y, threshold=0.15):
     x_np = x.cpu().numpy().flatten()
     y_np = y.cpu().numpy().flatten()
@@ -46,8 +42,7 @@ def is_nonlinear(x, y, threshold=0.15):
 configuration = Configuration(MODEL_NAME)
 grammar = GrammarEngine(configuration)
 semantic = SemanticEngine(configuration)
-sentence_encoder = SentenceEncoder()
-environment = WriterEnvironment(configuration, grammar, semantic, sentence_encoder, "gen")
+environment = WriterEnvironment(configuration, grammar, semantic, "gen")
 
 agents = []
 for prefix in MODEL_PREFIXES:
@@ -65,14 +60,10 @@ with torch.no_grad():
     plt.plot(x_act.cpu(), y_default, label="SiLU")
     
     for i, agent in enumerate(agents):
-        gf_activation = agent.glp_network.grammar_activation.to(device)
-        gy_activation = gf_activation(x_act).cpu()
-        plt.plot(x_act.cpu(), gy_activation, label="G:" + MODEL_PREFIXES[i])
+        f_activation = agent.glp_network.glp_activation.to(device)
+        y_activation = f_activation(x_act).cpu()
+        plt.plot(x_act.cpu(), y_activation, label=MODEL_PREFIXES[i])
         
-        lf_activation = agent.glp_network.lemma_activation.to(device)
-        ly_activation = lf_activation(x_act).cpu()
-        plt.plot(x_act.cpu(), ly_activation, label="L:" + MODEL_PREFIXES[i])
-
     plt.title("Learned Activation Function")
     plt.legend()
     plt.show()

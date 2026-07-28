@@ -36,8 +36,7 @@ from .context import (
 
 from .sentence_encoder import (
     SentenceEncoder,
-    EncodedSentence,
-    EMPTY_SENTENCE,
+    EncodedSentence
 )
 
 # --- Writer System --------------------------------------------------------

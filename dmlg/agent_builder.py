@@ -12,7 +12,7 @@ from .sentence_encoder import SentenceEncoder
 from .curriculum import Curriculum
 from .tokens import TokenPage
 
-DATA_FOLDER: str = "../triadic-data/toy-system-v5/"
+DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v6/"
 MODEL_FILENAME: str = "_model.bin"
 TOKENS_FILENAME: str = "_tokens.txt"
 OUTPUT_FILENAME: str = "_output.txt"
@@ -22,12 +22,10 @@ class AgentBuilder:
     configuration: Configuration
     grammar: GrammarEngine = field(init=False)
     semantic: SemanticEngine = field(init=False)
-    sentence_encoder: SentenceEncoder = field(init=False)
     
     def __post_init__(self):
         self.grammar = GrammarEngine(self.configuration)
         self.semantic = SemanticEngine(self.configuration)
-        self.sentence_encoder = SentenceEncoder()
     
     def environment_path(self, environment: WriterEnvironment) -> str:
         return DATA_FOLDER + environment.configuration.name + "/"
@@ -69,7 +67,7 @@ class AgentBuilder:
         return curriculum
 
     def build_environment(self, configuration: Configuration, prefix: str) -> WriterEnvironment:
-        environment = WriterEnvironment(configuration, self.grammar, self.semantic, self.sentence_encoder, prefix)
+        environment = WriterEnvironment(configuration, self.grammar, self.semantic, prefix)
         return environment
                       
     def train_agent(self, environment: WriterEnvironment, curriculum: Curriculum):

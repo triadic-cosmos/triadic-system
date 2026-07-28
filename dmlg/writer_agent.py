@@ -44,7 +44,10 @@ class WriterAgent:
 
     def __str__(self):
         return f"[{self.id}] trainings = {self.training_count}"
-        
+
+    def new_context(self) -> ContextWindow:
+        return ContextWindow(self.configuration, self.glp_network.lemma_embedding_dict)
+
     # ------------------------------------------------------------
     # Learning and curriculum training
     # ------------------------------------------------------------
@@ -55,14 +58,14 @@ class WriterAgent:
             # 1. train for each token
             for tok in sentence.tokens:
                 target = self.token_dictionary.add_and_get(tok.text)
-                model_input = ModelInput(context_window, story.embedding, target.is_grammar())
+                model_input = ModelInput(context_window, story.embedding)
                 self.training_count += 1
                 self.glp_network.learn(model_input, target, batch)
                 model_input.window.add_token(target)
 
             # 2. context / narrative for each sentence
             dict_tokens = [self.token_dictionary.add_and_get(t.text) for t in sentence.tokens]
-            encoded = self.environment.sentence_encoder.encode_sentence(dict_tokens)
+            encoded = sentence.get_encoded(self.glp_network.sentence_encoder)
             context_window.add_sentence(encoded)
             context_window.update_narrative_memory(dict_tokens)
 
@@ -74,7 +77,7 @@ class WriterAgent:
 
     def train_curriculum(self, curriculum: Curriculum, warmup_epochs: int, random_epochs: int):
         # Reuse context for all epochs
-        context_window = ContextWindow(self.configuration)
+        context_window = self.new_context()
         batch = TrainingBatch()
 
         # Train sequences using order curriculum 
@@ -228,26 +231,27 @@ class WriterAgent:
     # Generation
     # ------------------------------------------------------------
 
-    def propose_token(self, model_input: ModelInput) -> Optional[Token]:
+    def propose_token(self, model_input: ModelInput) -> Optional[TokenLogit]:
         outputs: List[TokenLogit] = self.glp_network.propose(model_input)
 
         if not outputs:
             return None
 
-        # 1. Top-k selection
-        top_k = self.environment.configuration.get_top_k(model_input.grammar)
+        # top-k pairs
+        top_k = self.environment.configuration.top_k
         candidates = outputs[:top_k]
 
-        # 2. Softmax with temperature
-        temperature = self.environment.configuration.temperature 
-        exps = [math.exp(t.logit / temperature) for t in candidates]
-        total = sum(exps)
-        probs = [e / total for e in exps]
+        # softmax sampling over pair scores
+        temperature = self.environment.configuration.temperature
+        logits = [c.logit for c in candidates]
+        exp_logits = [math.exp(l / temperature) for l in logits]
+        total = sum(exp_logits)
+        probs = [e / total for e in exp_logits]
 
-        # 3. Probabilistic choice
         selected = self.rng.choices(candidates, weights=probs, k=1)[0]
 
-        return selected.token
+        # return full TokenLogit (grammar + lemma + logit)
+        return selected
 
     def generate_keywords(self, prompt: str) -> set:
         all_keywords = set()
@@ -259,29 +263,42 @@ class WriterAgent:
             if token.text in all_keywords:
                 keywords.add(token.text)
         return keywords
-  
+
     def generate_sentence(self, sequence: List[float], ctx: ContextWindow, sentences: List[str]) -> WriterSentence:
         generated: List[Token] = []
-        grammar = True
 
         for _ in range(self.max_tokens):
-            proposal = self.propose_token(ModelInput(ctx, sequence, grammar))
+            proposal: TokenLogit = self.propose_token(ModelInput(ctx, sequence))
             if proposal is None:
                 break
-            token = self.token_dictionary.add_and_get(proposal.text)
-            generated.append(token)
-            ctx.add_token(token)
-            
-            if proposal.is_eol():
+
+            # --- 1. ALWAYS append grammar token ---
+            grammar_tok = self.token_dictionary.add_and_get(proposal.grammar.text)
+            generated.append(grammar_tok)
+            ctx.add_token(grammar_tok)
+
+            # --- 2. Append lemma token only if different from grammar ---
+            if proposal.lemma is not None and proposal.lemma != proposal.grammar:
+                lemma_tok = self.token_dictionary.add_and_get(proposal.lemma.text)
+                generated.append(lemma_tok)
+                ctx.add_token(lemma_tok)
+            else:
+                lemma_tok = grammar_tok   # terminal case
+
+            # --- 3. EOL check MUST be on grammar token ---
+            if grammar_tok.is_eol():
+                # grammar validation on canonical tokens
                 if self.environment.grammar.basic_validate_grammar_tokens(generated):
                     natural = self.environment.grammar.convert_from_canonical_tokens(generated)
-                    if self.environment.semantic.validate(sentences, natural):        
-                        return WriterSentence(generated, natural)
-                return None # sentence failed quality check
-            
-            grammar = not grammar or proposal.is_terminal()
 
-        # close unfinished line in context
+                    # semantic validation
+                    if self.environment.semantic.validate(sentences, natural):
+                        return WriterSentence(generated, natural)
+
+                # failed quality check
+                return None
+
+        # --- If no EOL was produced, close the line in context ---
         eol = self.token_dictionary.add_and_get(Token.EOL.text)
         ctx.add_token(eol)
         return None
@@ -292,22 +309,21 @@ class WriterAgent:
     ) -> WriterSentence:
 
         class Beam:
-            def __init__(self, tokens: List[Token], ctx: ContextWindow, score: float, grammar: bool):
+            def __init__(self, tokens: List[Token], ctx: ContextWindow, score: float):
                 self.tokens = tokens
                 self.ctx = ctx
                 self.score = score
-                self.grammar = grammar
                 self.eol = self.tokens[-1].is_eol() if self.tokens else False
 
         # --- config parameters ---
-        temperature = self.environment.configuration.temperature 
-        alpha = self.environment.configuration.beam_alpha         
+        temperature = self.environment.configuration.temperature
+        alpha = self.environment.configuration.beam_alpha
         jitter_amp = self.environment.configuration.beam_jitter
         max_tokens = self.environment.configuration.max_tokens
         nr_of_beams = self.environment.configuration.nr_of_beams
 
         # --- initialize ---
-        beams: List[Beam] = [Beam([], ctx.copy_current(), 0, True)]
+        beams: List[Beam] = [Beam([], ctx.copy_current(), 0)]
         best_sentence = None
         best_score = None
 
@@ -323,61 +339,68 @@ class WriterAgent:
                     new_beams.append(beam)
                     continue
 
+                # GLP propose(): returns grammar+lemma pairs sorted by score
                 outputs: List[TokenLogit] = self.glp_network.propose(
-                    ModelInput(beam.ctx, sequence, beam.grammar)
+                    ModelInput(beam.ctx, sequence)
                 )
 
                 if not outputs:
                     continue
 
-                # --- top-k selection ---
-                top_k = self.environment.configuration.get_top_k(beam.grammar)
+                # --- top-k pairs ---
+                top_k = self.environment.configuration.top_k
                 candidates = outputs[:top_k]
 
-                # --- softmax over logits ---
+                # --- softmax over pair-scores ---
                 logits = [c.logit for c in candidates]
                 exp_logits = [math.exp(l / temperature) for l in logits]
                 sum_exp = sum(exp_logits)
                 softmax_scores = [e / sum_exp for e in exp_logits]
 
-                for idx, logit in enumerate(candidates):
-                    tok = logit.token
-                    tok = self.token_dictionary.add_and_get(tok.text)
+                # --- fork beams ---
+                for idx, pair in enumerate(candidates):
 
-                    # fork context
+                    # 1. Grammar token (always emitted first)
+                    grammar_tok = self.token_dictionary.add_and_get(pair.grammar.text)
+
+                    new_tokens = beam.tokens + [grammar_tok]
                     new_ctx = beam.ctx.copy_current()
-                    new_ctx.add_token(tok)
-                    new_tokens = beam.tokens + [tok]
+                    new_ctx.add_token(grammar_tok)
 
-                    # softmax score
+                    # 2. Lemma token (only if different from grammar)
+                    if pair.lemma != pair.grammar:
+                        lemma_tok = self.token_dictionary.add_and_get(pair.lemma.text)
+                        new_tokens.append(lemma_tok)
+                        new_ctx.add_token(lemma_tok)
+
+                    # 3. Score from softmax
                     score = softmax_scores[idx]
 
-                    # damping
+                    # 4. Damping
                     score = score ** alpha
 
-                    # multipliers
-                    if tok.is_eol():
-                        score *= 2.0
-                    if tok.text not in used_tokens:
+                    # 5. Multipliers
+                    if grammar_tok.is_eol():
+                        score += 20.0
+                    if grammar_tok.text not in used_tokens:
                         score *= 1.5
 
-                    # jitter
+                    # 6. Jitter
                     score *= 1.0 + self.rng.random() * jitter_amp
 
-                    # keyword bonus
-                    score += keyword_scores.get(tok.text, 0)
+                    # 7. Keyword bonus
+                    score += keyword_scores.get(grammar_tok.text, 0)
 
-                    # accumulate with beam history
+                    # 8. Accumulate with beam history
                     total_score = score + beam.score * 0.9
-                    new_grammar = not beam.grammar or tok.is_terminal()
 
-                    # create new beam
-                    new_beam = Beam(new_tokens, new_ctx, total_score, new_grammar)
+                    # 9. Create new beam
+                    new_beam = Beam(new_tokens, new_ctx, total_score)
 
-                    # evaluate the new full sentence 
+                    # 10. Evaluate full sentence
                     if new_beam.eol:
                         if best_sentence is None or new_beam.score >= best_score:
-                            # validate canonical tokens (dictionary tokens zijn ok)
+                            # validate canonical tokens
                             if not self.environment.grammar.basic_validate_grammar_tokens(new_tokens):
                                 continue
                             natural = self.environment.grammar.convert_from_canonical_tokens(new_tokens)
@@ -390,8 +413,6 @@ class WriterAgent:
 
             # prune beams
             new_beams.sort(key=lambda b: b.score, reverse=True)
-
-            # beams = top_k best beams
             beams = new_beams[:nr_of_beams]
 
             if all(b.eol for b in beams):
@@ -407,77 +428,133 @@ class WriterAgent:
         for sentence in story.sentences:
             sentence.fixed = self.environment.grammar.fix_grammar(sentence.natural) 
     
-    def write_story(self, prefix: str, ctx: ContextWindow, prompt: str = None, keywords: Set[str] = None, beam_search: bool = False) -> WriterStory:
+    def write_story(
+        self,
+        prefix: str,
+        ctx: ContextWindow,
+        prompt: str = None,
+        keywords: Set[str] = None,
+        beam_search: bool = False
+    ) -> WriterStory:
+
         index: int = 0
         lines: int = self.environment.configuration.story_lines
 
-        # use first agent to select sequence embedding
+        # 1. Choose sequence embedding
         sequence_embedding = self.choose_best_embedding(keywords)
 
-        if prompt != None and len(prompt) > 0:
+        # 2. Prompt injection
+        if prompt is not None and len(prompt) > 0:
             while True:
-                # fill up whole context with prompt
                 for prompt_line in prompt:
                     raw_tokens = self.environment.grammar.convert_to_canonical_tokens(prompt_line)
                     tokens = [self.token_dictionary.add_and_get(t.text) for t in raw_tokens]
-                    encoded = self.environment.sentence_encoder.encode_sentence(tokens)
+
+                    encoded = self.glp_network.sentence_encoder.encode_sentence(tokens)
                     ctx.add_sentence(encoded)
                     ctx.update_narrative_memory(tokens)
+
                 if ctx.is_filled():
                     break
-            
+
         sentences = []
         writer_sentences = []
-        nr_of_tokens = self.environment.configuration.max_tokens
-        if keywords != None:
-            keyword_scores = dict()
-            for keyword in keywords:
-                keyword_scores[keyword] = 1.0
-            used_tokens = set()           
 
-        print("> generating", end= " ")
+        # Keyword scoring (lemma or terminal tokens)
+        if keywords is not None:
+            keyword_scores = {kw: 1.0 for kw in keywords}
+            used_tokens = set()
+
+        print("> generating", end=" ")
+
         beam_attempts = self.configuration.beam_attempts
-        for i in range(self.environment.configuration.max_attempts):
+
+        # 3. Generate story line per line
+        for _ in range(self.environment.configuration.max_attempts):
             ctx.clear_current_sentence()
-            
-            if beam_search and beam_attempts > 0 and keywords != None:
-                sentence = self.generate_sentence_beam_search(sequence_embedding, ctx, keyword_scores, used_tokens, sentences)
+
+            # --- BEAM SEARCH MODE ---
+            if beam_search and beam_attempts > 0 and keywords is not None:
+                sentence = self.generate_sentence_beam_search(
+                    sequence_embedding,
+                    ctx,
+                    keyword_scores,
+                    used_tokens,
+                    sentences
+                )
+
                 if not sentence:
                     beam_attempts -= 1
                     continue
+
+                # update keyword usage
                 for token in sentence.tokens:
                     used_tokens.add(token)
                     if token.text in keyword_scores:
-                        keyword_scores[token.text] = keyword_scores[token.text] * 0.9                
+                        keyword_scores[token.text] *= 0.9
+
+            # --- NORMAL MODE ---
             else:
                 sentence = self.generate_sentence(sequence_embedding, ctx, sentences)
                 if not sentence:
                     continue
-        
-            print(f"{index}", end = " ")
+
+            # 4. Log progress
+            print(f"{index}", end=" ")
+
+            # 5. Update story
             sentences.append(sentence.natural)
             writer_sentences.append(sentence)
-            encoded = self.environment.sentence_encoder.encode_sentence(sentence.tokens)
+
+            # 6. Update context window
+            encoded = self.glp_network.sentence_encoder.encode_sentence(sentence.tokens)
             ctx.add_sentence(encoded)
             ctx.update_narrative_memory(sentence.tokens)
+
             index += 1
             if index == lines:
                 break
+
             beam_attempts = self.configuration.beam_attempts
 
         print("done")
+
+        # 7. Build final story
         story = WriterStory(writer_sentences)
+
+        # 8. Grammar fix (canonical → natural)
         self.fix_story(story)
+
         print(f"{prefix}. {story.get_story()}")
         return story
 
-    def build_output(self, output_path: str, amount: int, prompt: List[str] = None, keywords: Set[str] = None, beam_search: bool = False):
+    def build_output(
+        self,
+        output_path: str,
+        amount: int,
+        prompt: List[str] = None,
+        keywords: Set[str] = None,
+        beam_search: bool = False
+    ):
         index = 1
-        with open(output_path, "w", encoding='utf-8-sig') as file:
+
+        with open(output_path, "w", encoding="utf-8-sig") as file:
             while index <= amount:
-                ctx: ContextWindow = ContextWindow(self.environment.configuration)            
-                story = self.write_story(f"STORY-{index}", ctx, prompt, keywords, beam_search)
+                # 1. New context for each story
+                ctx = self.new_context()
+
+                # 2. Generate story
+                story = self.write_story(
+                    prefix=f"STORY-{index}",
+                    ctx=ctx,
+                    prompt=prompt,
+                    keywords=keywords,
+                    beam_search=beam_search
+                )
+
+                # 3. Write fixed sentences to output
                 for sentence in story.sentences:
                     file.write(sentence.fixed + "\n")
+
                 file.write("\n")
                 index += 1

@@ -228,13 +228,13 @@ class TriadicNarrator:
         self.configuration: Configuration = Configuration(self.params.model)
         self.configuration.story_lines = GEN_STORY_LINES
         self.builder = AgentBuilder(self.configuration)
-        self.ctx = ContextWindow(self.configuration)
         self.rng = random.Random()
         self.index = 0
         
         # Build the writer agent
         self.environment = self.builder.build_environment(self.configuration, self.params.prefix)
         self.agent: WriterAgent = self.builder.load_or_create_agent(self.environment)
+        self.ctx = self.agent.new_context()
 
     def bridge_chapters(self, first: TriadicNarratorChapter, second: TriadicNarratorChapter) -> List[str]:
         prompt = BRIDGE_PROMPT \
@@ -277,7 +277,7 @@ class TriadicNarrator:
     def add_to_context(self, moderated: List[str]):
         for line in moderated:
             tokens = self.environment.grammar.convert_to_canonical_tokens(line)
-            sentence = self.environment.sentence_encoder.encode_sentence(tokens)
+            sentence = self.agent.glp_network.sentence_encoder.encode_sentence(tokens)
             self.ctx.add_sentence(sentence)
 
     def write_chapter(self) -> TriadicNarratorChapter:
@@ -556,7 +556,7 @@ class TriadicNarrator:
         with open(output_filename, "a", encoding='utf-8-sig') as file:
             while True:
                 # Reset context before each chapter
-                self.ctx = ContextWindow(self.configuration)
+                self.ctx = self.agent.new_context()
                 
                 # Create incremental small chapters
                 chapters: List[TriadicNarratorChapter] = []

@@ -1,15 +1,24 @@
 # glp_network.py
-from typing import List
 from dataclasses import dataclass, field
-import torch
-import torch.nn.functional as F
+from typing import List
 from uuid import uuid4
 
+import torch
+import torch.nn.functional as F
+
 from .config import Configuration
-from .tokens import Token, TokenPage, TokenLogit, TokenDictionary, LemmaGrammarDictionary, LemmaEmbeddingDictionary, GRAMMAR_TOKENS
+from .tokens import (
+    Token,
+    TargetToken,
+    TokenDictionary,
+    TokenLogit,
+    TokenPage,
+    LemmaEmbeddingDictionary,
+    GRAMMAR_TOKENS,
+)
+from .sentence_encoder import SentenceEncoder
 from .context import ModelInput, InputEncoder
 from .neural import NeuralNetwork, ActivationMLP
-
 
 # ============================================================
 # TrainingSample
@@ -18,18 +27,20 @@ from .neural import NeuralNetwork, ActivationMLP
 @dataclass
 class TrainingSample:
     input_vector: List[float]
-    target: Token
-    grammar: bool
-    prev_lemma: str       
+    target: TargetToken      # grammar + lemma
+    page_index: int          # -1 for terminals
 
+# ============================================================
+# TrainingBatch
+# ============================================================
 
 @dataclass
 class TrainingBatch:
     samples: List[TrainingSample] = field(default_factory=list)
-
+    training_count: int = 0
 
 # ============================================================
-# GLP Network (grammar + lemma)
+# GlpNetwork
 # ============================================================
 
 @dataclass
@@ -38,183 +49,40 @@ class GlpNetwork:
     token_dictionary: TokenDictionary
     encoder: InputEncoder = field(init=False)
 
-    grammar_activation: ActivationMLP = field(init=False)
-    grammar_network: NeuralNetwork = field(init=False)
-
-    lemma_activation: ActivationMLP = field(init=False)
-    lemma_network: NeuralNetwork = field(init=False)
+    glp_activation: ActivationMLP = field(init=False)
+    glp_network: NeuralNetwork = field(init=False)
 
     grammar_tokens: List[Token] = field(init=False)
-    lemma_grammar_dict: LemmaGrammarDictionary = field(init=False)
-
     lemma_embedding_dict: LemmaEmbeddingDictionary = field(init=False)
+    sentence_encoder: SentenceEncoder = field(init=False)
 
-    # paging structure remains
     page_list: List[TokenPage] = field(default_factory=list)
     pages: dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.encoder = InputEncoder()
-        self._create_grammar_network()
-        self._create_lemma_network()
-        
-        self.lemma_embedding_dict = LemmaEmbeddingDictionary(self.configuration.lemma_dimension)
 
+        # monolithic network
+        self.glp_activation = ActivationMLP(self.configuration.activation_hidden_size)
+        self.glp_network = NeuralNetwork(
+            self.configuration.generator_input_size(),
+            self.configuration.glp_hidden_size,
+            self.configuration.generator_output_size(),
+            self.glp_activation,
+        )
+
+        self.lemma_embedding_dict = self.create_lemma_embedding_dictionary()        
         self.grammar_tokens = [self.token_dictionary.map[text] for text in GRAMMAR_TOKENS]
-        self.lemma_grammar_dict = LemmaGrammarDictionary()
+        self.sentence_encoder = SentenceEncoder(self.lemma_embedding_dict, self.configuration)
 
-    # --------------------------------------------------------
-    # Network creation
-    # --------------------------------------------------------
+    # ------------------------------------------------------------
+    # Embedding Learning
+    # ------------------------------------------------------------
 
-    def _create_grammar_network(self):
-        self.grammar_activation = ActivationMLP(self.configuration.activation_hidden_size)
-        self.grammar_network = NeuralNetwork(
-            self.configuration.generator_input_size(),
-            self.configuration.grammar_hidden_size,
-            self.configuration.grammar_dimension,
-            self.grammar_activation
-        )
-
-    def _create_lemma_network(self):
-        self.lemma_activation = ActivationMLP(self.configuration.activation_hidden_size)
-        self.lemma_network = NeuralNetwork(
-            self.configuration.generator_input_size(),
-            self.configuration.lemma_hidden_size,
-            self.configuration.generator_output_size(),   # bits + tri + pages
-            self.lemma_activation
-        )
-
-    # --------------------------------------------------------
-    # Learning
-    # --------------------------------------------------------
-
-    def learn(self, model_input: ModelInput, target: Token, batch: TrainingBatch):
-        """
-        Add sample to batch. Paging still used to assign lemma tokens to pages,
-        but no per-page networks anymore.
-        """
-        # Determine page for lemma tokens
-        if not model_input.grammar:
-            # update lemma grammar dictionary
-            if target.is_lemma():
-                idx = target.lemma_index
-                g = model_input.window.last_token().grammar_index
-                if idx is not None and g is not None:
-                    mask = self.lemma_grammar_dict.mask.get(idx, 0)
-                    mask |= (1 << g)
-                    self.lemma_grammar_dict.set_mask(idx, mask)
-            
-            prev = model_input.window.last_lemma_token()   
-            page = self.pages.get(prev)
-
-            if page is None:
-                # find existing page containing target
-                page = next((p for p in self.page_list if p.has_output_token(target)), None)
-
-                if page:
-                    page.add_input_token(prev)
-                elif len(self.page_list) < self.configuration.total_pages:
-                    page = TokenPage(uuid4(), {prev}, [target])
-                    self.page_list.append(page)
-                else:
-                    page = min(self.page_list, key=lambda p: p.input_size())
-
-                self.pages[prev] = page
-
-            if not page.has_output_token(target):
-                page.add_output_token(target)
-
-        # Add training sample
-        batch.samples.append(
-            TrainingSample(
-                input_vector=self.encoder.encode(model_input),
-                target=target,
-                grammar=model_input.grammar,
-                prev_lemma=model_input.window.last_lemma_token()   
-            )
-        )
-
-    def learn_batch(self, batch: TrainingBatch):
-        if not batch.samples:
-            return
-
-        # Split grammar vs lemma
-        grammar_samples = [s for s in batch.samples if s.grammar]
-        lemma_samples = [s for s in batch.samples if not s.grammar]
-
-        if grammar_samples:
-            self._learn_grammar(grammar_samples)
-
-        if lemma_samples:
-            self._learn_lemma(lemma_samples)
-            alpha = self._current_alpha(batch.training_count)
-            self._update_lemma_embeddings_after_batch(lemma_samples, alpha)
-
-    # --------------------------------------------------------
-    # Grammar learning
-    # --------------------------------------------------------
-
-    def _learn_grammar(self, samples: List[TrainingSample]):
-        xs = torch.tensor([s.input_vector for s in samples], dtype=torch.float32)
-        ys = torch.tensor([s.target.grammar_index for s in samples], dtype=torch.long)
-
-        pred = self.grammar_network(xs)
-        loss = F.cross_entropy(pred, ys)
-
-        self.grammar_network.opt.zero_grad()
-        loss.backward()
-        self.grammar_network.opt.step()
-
-    # --------------------------------------------------------
-    # Lemma learning
-    # --------------------------------------------------------
-
-    def _learn_lemma(self, samples: List[TrainingSample]):
-        xs = torch.tensor([s.input_vector for s in samples], dtype=torch.float32)
-        pred = self.lemma_network(xs)
-
-        # split output vector
-        lemma_dim = self.configuration.lemma_dimension
-        page_dim = self.configuration.total_pages
-
-        embedding_pred = pred[:, :lemma_dim] # learnable embedding prediction
-        page_pred = pred[:, lemma_dim:lemma_dim+page_dim]  # page one-hot logits
-
-        # targets
-        embedding_targets = []
-        page_targets = []
-
-        for s in samples:
-            # 1. lemma embedding target
-            lemma_emb = self.lemma_embedding_dict.get_embedding(s.target)
-            embedding_targets.append(lemma_emb.embedding)
-
-            # 2. page one-hot target
-            page = self.pages.get(s.prev_lemma)
-            if page is None:
-                page_idx = 0
-            else:
-                page_idx = self.page_list.index(page)
-
-            page_targets.append(page_idx)
-
-        embedding_targets = torch.tensor(embedding_targets, dtype=torch.float32)
-        page_targets = torch.tensor(page_targets, dtype=torch.long)
-
-        # normalize predicted embeddings
-        embedding_pred = F.normalize(embedding_pred, p=2, dim=1)
-        embedding_targets = F.normalize(embedding_targets, p=2, dim=1)
-
-        # losses
-        loss_embedding = 1.0 - F.cosine_similarity(embedding_pred, embedding_targets).mean()
-        loss_page = F.cross_entropy(page_pred, page_targets)
-
-        loss = loss_embedding + loss_page
-
-        self.lemma_network.opt.zero_grad()
-        loss.backward()
-        self.lemma_network.opt.step()
+    def create_lemma_embedding_dictionary(self) -> LemmaEmbeddingDictionary:
+        return LemmaEmbeddingDictionary(
+                self.configuration.lemma_input_dimension,
+                self.configuration.lemma_output_dimension)
 
     # reduce alpha to train embeddings in function of number of epochs
     def _current_alpha(self, training_count: int) -> float:
@@ -230,121 +98,228 @@ class GlpNetwork:
 
     def _update_lemma_embeddings_after_batch(self, samples: List[TrainingSample], alpha: float):
         for s in samples:
-            # 1. Run inference to get model embedding prediction
             x = torch.tensor([s.input_vector], dtype=torch.float32)
             with torch.no_grad():
-                pred = self.lemma_network(x).squeeze(0)
+                pred = self.glp_network(x).squeeze(0)
 
-            lemma_dim = self.configuration.lemma_dimension
+            lemma_dim = self.configuration.lemma_output_dimension
             embedding_pred = pred[:lemma_dim]
-
-            # normalize predicted embedding
             embedding_pred = F.normalize(embedding_pred, p=2, dim=0)
 
-            # 2. Get the learnable embedding object
-            lemma_emb = self.lemma_embedding_dict.get_embedding(s.target)
+            emb_obj = self.lemma_embedding_dict.get_output_embedding(s.target)
+            emb_obj.update(embedding_pred.tolist(), alpha)
+            
+    # ------------------------------------------------------------
+    # Learning
+    # ------------------------------------------------------------
+    def learn(self, model_input: ModelInput, target: Token, batch: TrainingBatch):
+        # TERMINAL CASE
+        if target.is_terminal():
+            tt = TargetToken(grammar=target, lemma=target)
+            sample = TrainingSample(
+                input_vector=self.encoder.encode(model_input),
+                target=tt,
+                page_index=-1
+            )
+            batch.samples.append(sample)
+            return
 
-            # 3. Apply alpha‑mix update
-            lemma_emb.update(embedding_pred.tolist(), alpha)
+        # NON‑TERMINAL GRAMMAR → negeren
+        if not target.is_lemma():
+            return
 
-    # --------------------------------------------------------
-    # Inference
-    # --------------------------------------------------------
+        # LEMMA CASE
+        grammar_tok = model_input.window.last_token()
+        lemma_tok = target
+        tt = TargetToken(grammar=grammar_tok, lemma=lemma_tok)
 
-    def select_grammar_token(self, token: Token, model_input: ModelInput) -> bool:
-        last = model_input.window.last_token()
-        if last.text == token.text:
-            return False
-        if token.is_eol():
-            if not last.is_punctuation():
-                return False
-        elif last.is_punctuation():
-              return False  
-        if token.is_punctuation() and last.is_terminal():
-            return False
-        return True
-    
-    def propose(self, model_input: ModelInput):
-        if model_input.grammar:
-            return self._propose_grammar(model_input)
-        return self._propose_lemma(model_input)
+        prev_lemma = model_input.window.last_lemma_token()
+        page = self.pages.get(prev_lemma)
 
-    def _propose_grammar(self, model_input: ModelInput):
-        x = torch.tensor([self.encoder.encode(model_input)], dtype=torch.float32)
-        with torch.no_grad():
-            pred = self.grammar_network(x).squeeze(0)
+        if page is None:
+            page = next((p for p in self.page_list if p.has_output_token(tt)), None)
 
-        logits = []
-        for tok in self.grammar_tokens:
-            if self.select_grammar_token(tok, model_input):
-                logit = float(pred[tok.grammar_index])
-                logits.append(TokenLogit(tok, logit))
+            if page:
+                page.add_input_token(prev_lemma)
 
-        logits.sort(key=lambda t: t.logit, reverse=True)
-        return logits
+            elif len(self.page_list) < self.configuration.total_pages:
+                page = TokenPage(uuid4(), {prev_lemma}, [tt])
+                self.page_list.append(page)
 
-    def _propose_lemma(self, model_input: ModelInput):
-        x = torch.tensor([self.encoder.encode(model_input)], dtype=torch.float32)
-        with torch.no_grad():
-            pred = self.lemma_network(x).squeeze(0)
+            else:
+                page = min(self.page_list, key=lambda p: p.input_size())
 
-        lemma_dim = self.configuration.lemma_dimension
+            self.pages[prev_lemma] = page
+
+        if not page.has_output_token(tt):
+            page.add_output_token(tt)
+
+        page_index = self.page_list.index(page)
+
+        sample = TrainingSample(
+            input_vector=self.encoder.encode(model_input),
+            target=tt,
+            page_index=page_index
+        )
+        batch.samples.append(sample)
+
+    def learn_batch(self, batch: TrainingBatch):
+        if not batch.samples:
+            return
+
+        self._learn_glp(batch.samples)
+
+        alpha = self._current_alpha(batch.training_count)
+        self._update_lemma_embeddings_after_batch(batch.samples, alpha)
+
+    # ------------------------------------------------------------
+    # Monolithic learning
+    # ------------------------------------------------------------
+    def _learn_glp(self, samples: List[TrainingSample]):
+        xs = torch.tensor([s.input_vector for s in samples], dtype=torch.float32)
+        pred = self.glp_network(xs)
+
+        lemma_dim = self.configuration.lemma_output_dimension
         page_dim = self.configuration.total_pages
 
-        # ------------------------------------------------------------
-        # 1. Split output: embedding + page logits
-        # ------------------------------------------------------------
-        embedding_pred = pred[:lemma_dim]
-        page_pred = pred[lemma_dim:lemma_dim+page_dim]
+        lemma_pred = pred[:, :lemma_dim]
+        page_pred = pred[:, lemma_dim:]
 
-        # normalize model embedding
-        embedding_pred = F.normalize(embedding_pred, p=2, dim=0)
+        # Targets
+        lemma_targets_list = []
+        page_targets_list = []
+        page_mask_list = []  # True = CE (lemma tokens), False = MSE (terminals)
 
-        # ------------------------------------------------------------
-        # 2. Sort pages by logit
-        # ------------------------------------------------------------
+        for s in samples:
+            emb = self.lemma_embedding_dict.get_output_embedding(s.target).embedding
+            lemma_targets_list.append(emb)
+
+            if s.page_index == -1:
+                zero = [0.0] * page_dim
+                page_targets_list.append(zero)
+                page_mask_list.append(False)
+            else:
+                onehot = [0.0] * page_dim
+                onehot[s.page_index] = 1.0
+                page_targets_list.append(onehot)
+                page_mask_list.append(True)
+
+        lemma_targets = torch.tensor(lemma_targets_list, dtype=torch.float32)
+        page_targets = torch.tensor(page_targets_list, dtype=torch.float32)
+        page_mask = torch.tensor(page_mask_list, dtype=torch.bool)
+
+        # Normalize lemma embeddings
+        lemma_pred = F.normalize(lemma_pred, p=2, dim=1)
+        lemma_targets = F.normalize(lemma_targets, p=2, dim=1)
+
+        # Lemma loss (cosine)
+        loss_lemma = 1.0 - F.cosine_similarity(lemma_pred, lemma_targets).mean()
+
+        # Page loss
+        if page_mask.any():
+            ce_pred = page_pred[page_mask]
+            ce_target = page_targets[page_mask].argmax(dim=1)
+            loss_page_ce = F.cross_entropy(ce_pred, ce_target)
+        else:
+            loss_page_ce = torch.tensor(0.0, dtype=torch.float32)
+
+        if (~page_mask).any():
+            mse_pred = page_pred[~page_mask]
+            mse_target = page_targets[~page_mask]
+            loss_page_mse = F.mse_loss(mse_pred, mse_target)
+        else:
+            loss_page_mse = torch.tensor(0.0, dtype=torch.float32)
+
+        loss_page = loss_page_ce + loss_page_mse
+
+        loss = loss_lemma + loss_page
+
+        self.glp_network.opt.zero_grad()
+        loss.backward()
+        self.glp_network.opt.step()
+
+    # ------------------------------------------------------------
+    # Inference
+    # ------------------------------------------------------------
+    def select_terminal_token(self, target: TargetToken, model_input: ModelInput) -> bool:
+        grammar = target.grammar
+        last = model_input.window.last_token()
+
+        # 1. Prevent repeating the same terminal
+        if last.text == grammar.text:
+            return False
+
+        # 2. EOL rules
+        if grammar.is_eol():
+            if not last.is_end_punctuation():
+                return False
+            return True
+
+        # 3. Punctuation rules
+        if grammar.is_all_punctuation():
+            if last.is_all_punctuation():
+                return False
+            if last.is_terminal():
+                return False
+            return True
+
+        # 4. Default: allowed
+        return True
+
+    def propose(self, model_input: ModelInput):
+        # deterministic end of line after end punctuation
+        if model_input.window.last_token().is_end_punctuation():
+            return [TokenLogit(Token.EOL, Token.EOL, 1.0)]
+        
+        x = torch.tensor([self.encoder.encode(model_input)], dtype=torch.float32)
+        with torch.no_grad():
+            pred = self.glp_network(x).squeeze(0)
+
+        lemma_dim = self.configuration.lemma_output_dimension
+        page_dim = self.configuration.total_pages
+
+        # split output
+        lemma_pred = F.normalize(pred[:lemma_dim], p=2, dim=0)
+        page_pred = pred[lemma_dim : ]
+
+        # --- PAGE ROUTING ---
         page_scores = [(i, float(page_pred[i])) for i in range(len(self.page_list))]
         page_scores.sort(key=lambda t: t[1], reverse=True)
 
-        grammar_index = model_input.window.last_token().grammar_index
-
-        # ------------------------------------------------------------
-        # 3. Iterate pages in descending score order
-        # ------------------------------------------------------------
-        for page_idx, page_logit in page_scores:
-            page = self.page_list[page_idx]
-            logits = []
-
-            # ------------------------------------------------------------
-            # 4. Evaluate tokens in this page
-            # ------------------------------------------------------------
-            for tok in page.output_tokens:
-                idx = tok.lemma_index
-
-                # grammar compatibility filter
-                if grammar_index is not None:
-                    if not self.lemma_grammar_dict.is_compatible(idx, grammar_index):
-                        continue
-
-                # get lemma embedding
-                lemma_emb = self.lemma_embedding_dict.get_embedding(tok)
-                emb = torch.tensor(lemma_emb.embedding, dtype=torch.float32)
+        # TERMINAL TOKENS: implicitly present in each page
+        terminal_pairs: List[TokenLogit] = []
+        for terminal in TargetToken.TERMINALS:
+            if self.select_terminal_token(terminal, model_input):
+                emb = torch.tensor(
+                    self.lemma_embedding_dict.get_output_embedding(terminal).embedding,
+                    dtype=torch.float32,
+                )
                 emb = F.normalize(emb, p=2, dim=0)
+                cos = float(torch.dot(lemma_pred, emb))
+                terminal_pairs.append(
+                    TokenLogit(grammar=terminal.grammar, lemma=terminal.lemma, logit=cos)
+                )
 
-                # cosine similarity
-                cos = float(torch.dot(embedding_pred, emb))
+        # --- PAGE LOOP ---
+        for page_idx, _ in page_scores:
+            page = self.page_list[page_idx]
+            page_pairs: List[TokenLogit] = []
+            page_pairs += terminal_pairs
+                    
+            # LEMMA TOKENS: from page, paired with grammar_top
+            for tok in page.output_tokens:
+                emb = torch.tensor(
+                    self.lemma_embedding_dict.get_output_embedding(tok).embedding,
+                    dtype=torch.float32,
+                )                
+                emb = F.normalize(emb, p=2, dim=0)
+                cos = float(torch.dot(lemma_pred, emb))
+                page_pairs.append(TokenLogit(grammar=tok.grammar, lemma=tok.lemma, logit=cos))
 
-                # final score = cosine similarity (page already sorted)
-                logits.append(TokenLogit(tok, cos))
+            # when page has valid pairs → sort and STOP
+            if page_pairs:
+                page_pairs.sort(key=lambda t: t.logit, reverse=True)
+                return page_pairs
 
-            # ------------------------------------------------------------
-            # 5. If this page yields valid tokens → return them
-            # ------------------------------------------------------------
-            if logits:
-                logits.sort(key=lambda t: t.logit, reverse=True)
-                return logits
-
-        # ------------------------------------------------------------
-        # 6. No page produced valid tokens
-        # ------------------------------------------------------------
-        return []
+        # --- FALLBACK: no valid pairs found in any of the pages ---
+        return None
