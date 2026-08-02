@@ -75,15 +75,15 @@ HONEYMOON_PARAMS = TriadicNarratorParams(
 
 # Incremental book parameters
 INCREMENTAL_PARAMS = TriadicNarratorParams(
-    "blend",
+    "frankenstein",
     None,
     ("Rework this draft material into a coherent story, a literary masterpiece. "
-    "Make sure there is proper and exciting narrative arc. "
+    "Make sure there is proper and exciting narrative arc. Fix broken sentences. "
     "Keep all story elements related and realistic. Fill the gaps. "
     "A male main character is called Marvin and a female main character is called Alice. "),
     "Link the sequences maintaining their common theme. Be creative if necessary. ",
     None,
-    "blend",
+    "frankenstein",
     "30k",
     {},
     85,

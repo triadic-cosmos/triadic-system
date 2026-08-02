@@ -8,7 +8,7 @@ start = time.perf_counter()
 
 print("Generating stories...")
 
-model = "blend"
+model = "frankenstein"
 prefix = "30k"
 number_lines = 20
 number_stories = 10

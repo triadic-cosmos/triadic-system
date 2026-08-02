@@ -17,7 +17,7 @@ from dmlg import (
 
 MODEL_FILENAME = "_model.bin"
 MODEL_PREFIXES = ["30k"]
-MODEL_NAME = "blend"
+MODEL_NAME = "frankenstein"
 
 def load_agent(name:str, prefix: str) -> WriterAgent:
     return WriterAgent.load(environment, DATA_FOLDER + name + "/" + prefix + MODEL_FILENAME)  
