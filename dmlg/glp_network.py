@@ -15,6 +15,9 @@ from .tokens import (
     TokenPage,
     LemmaEmbeddingDictionary,
     GRAMMAR_TOKENS,
+    NO_PUNCTUATION_TOKENS,
+    CONJUGATION_TOKENS,
+    NOUN_TOKENS
 )
 from .sentence_encoder import SentenceEncoder
 from .context import ModelInput, InputEncoder
@@ -241,6 +244,14 @@ class GlpNetwork:
     # ------------------------------------------------------------
     # Inference
     # ------------------------------------------------------------
+    def determine_incompatible_grammar(self, model_input: ModelInput) -> set:
+        last_grammar = model_input.window.last_grammar_token()
+        if last_grammar.text in CONJUGATION_TOKENS:
+            return CONJUGATION_TOKENS
+        if last_grammar.text in NOUN_TOKENS:
+            return NOUN_TOKENS
+        return set()
+            
     def select_terminal_token(self, target: TargetToken, model_input: ModelInput) -> bool:
         grammar = target.grammar
         last = model_input.window.last_token()
@@ -260,6 +271,9 @@ class GlpNetwork:
             if last.is_all_punctuation():
                 return False
             if last.is_terminal():
+                return False
+            forelast = model_input.window.forelast_token()
+            if forelast.text in NO_PUNCTUATION_TOKENS:
                 return False
             return True
 
@@ -300,26 +314,28 @@ class GlpNetwork:
                     TokenLogit(grammar=terminal.grammar, lemma=terminal.lemma, logit=cos)
                 )
 
+        incompatible_grammar = self.determine_incompatible_grammar(model_input)
+
         # --- PAGE LOOP ---
         for page_idx, _ in page_scores:
             page = self.page_list[page_idx]
             page_pairs: List[TokenLogit] = []
-            page_pairs += terminal_pairs
                     
             # LEMMA TOKENS: from page, paired with grammar_top
             for tok in page.output_tokens:
-                emb = torch.tensor(
-                    self.lemma_embedding_dict.get_output_embedding(tok).embedding,
-                    dtype=torch.float32,
-                )                
-                emb = F.normalize(emb, p=2, dim=0)
-                cos = float(torch.dot(lemma_pred, emb))
-                page_pairs.append(TokenLogit(grammar=tok.grammar, lemma=tok.lemma, logit=cos))
+                if not tok.grammar.text in incompatible_grammar:
+                    emb = torch.tensor(
+                        self.lemma_embedding_dict.get_output_embedding(tok).embedding,
+                        dtype=torch.float32,
+                    )                
+                    emb = F.normalize(emb, p=2, dim=0)
+                    cos = float(torch.dot(lemma_pred, emb))
+                    page_pairs.append(TokenLogit(grammar=tok.grammar, lemma=tok.lemma, logit=cos))
 
             # when page has valid pairs → sort and STOP
             if page_pairs:
                 page_pairs.sort(key=lambda t: t.logit, reverse=True)
-                return page_pairs
+                return page_pairs + terminal_pairs # only add terminal pairs here
 
         # --- FALLBACK: no valid pairs found in any of the pages ---
         return None

@@ -46,6 +46,11 @@ class ContextWindow:
     def forelast_token(self) -> Token:
         return self._forelast_token
 
+    def last_grammar_token(self) -> Token:
+        if self._last_token.is_grammar():
+            return self._last_token
+        return self._forelast_token
+
     def last_lemma_token(self) -> str:
         lemma_text = self._last_lemma.text
         last_text = self._last_token.text

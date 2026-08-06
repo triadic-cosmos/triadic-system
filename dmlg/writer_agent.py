@@ -428,6 +428,11 @@ class WriterAgent:
         for sentence in story.sentences:
             sentence.fixed = self.environment.grammar.fix_grammar(sentence.natural) 
     
+    def update_context(self, ctx: ContextWindow, sentence: WriterSentence):
+        encoded = self.glp_network.sentence_encoder.encode_sentence(sentence.tokens)
+        ctx.add_sentence(encoded)
+        ctx.update_narrative_memory(sentence.tokens)
+
     def write_story(
         self,
         prefix: str,
@@ -507,9 +512,7 @@ class WriterAgent:
             writer_sentences.append(sentence)
 
             # 6. Update context window
-            encoded = self.glp_network.sentence_encoder.encode_sentence(sentence.tokens)
-            ctx.add_sentence(encoded)
-            ctx.update_narrative_memory(sentence.tokens)
+            self.update_context(ctx, sentence)
 
             index += 1
             if index == lines:

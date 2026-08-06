@@ -11,7 +11,7 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    glp_hidden_size: int = 1536
+    glp_hidden_size: int = 1280
     activation_hidden_size: int = 64
     lemma_input_dimension: int = 32
     lemma_output_dimension: int = 256
@@ -22,7 +22,7 @@ class Configuration:
     # ------------------------------------------------------------
     learn_alpha: float = 0.2
     alpha_damping: float = 100
-    max_alpha_transitions: int = 5_000_000
+    max_alpha_transitions: int = 3_000_000
 
     # ------------------------------------------------------------
     # Context parameters

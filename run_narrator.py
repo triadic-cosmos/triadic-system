@@ -7,11 +7,11 @@ from engine.triadic_llm import TriadicLLM
 import time
 
 # Parameters
-MIN_CHAPTERS = 4
+MIN_CHAPTERS = 15
 MAX_CHAPTERS = 20
 CANDIDATES = 5
-MIN_LINES = 15
-RETRIES = 10
+MIN_LINES = 20
+RETRIES = 3
 
 # Comedy sequential book parameters
 COMEDY_PARAMS = TriadicNarratorParams(
@@ -49,8 +49,8 @@ HYDE_PARAMS = TriadicNarratorParams(
     "All internal struggle belongs to Jekyll and Hyde only. "),
     "Find an original way to link the two sequences maintaining the dark gothic theme.",
     "This is a dark gothic book about internal struggle.",
-    "hyde-mix",
-    "15k",
+    "hyde",
+    "boost1",
     {"shadow", "fog", "laboratory", "potion", "guilt", "stain", "whisper", "conscience"},
     90,
     False
@@ -75,7 +75,7 @@ HONEYMOON_PARAMS = TriadicNarratorParams(
 
 # Incremental book parameters
 INCREMENTAL_PARAMS = TriadicNarratorParams(
-    "frankenstein",
+    "hyde",
     None,
     ("Rework this draft material into a coherent story, a literary masterpiece. "
     "Make sure there is proper and exciting narrative arc. Fix broken sentences. "
@@ -83,8 +83,8 @@ INCREMENTAL_PARAMS = TriadicNarratorParams(
     "A male main character is called Marvin and a female main character is called Alice. "),
     "Link the sequences maintaining their common theme. Be creative if necessary. ",
     None,
-    "frankenstein",
-    "30k",
+    "hyde",
+    "20k",
     {},
     85,
     False
@@ -124,6 +124,7 @@ def write_book(params: TriadicNarratorParams):
 def write_sequential_book(params: TriadicNarratorParams):
     llm: TriadicLLM = TriadicLLM()
     narrator: TriadicNarrator = TriadicNarrator(llm, params)
+    narrator.agent.environment.configuration.story_lines = MIN_LINES
     narrator.write_sequential_book(MIN_CHAPTERS, MAX_CHAPTERS, RETRIES)
 
 # Write an incremental story book with the trained agent
@@ -134,5 +135,5 @@ def write_incremental_book(params: TriadicNarratorParams):
 
 # Main
 start = time.perf_counter()
-write_incremental_book(INCREMENTAL_PARAMS)
+write_sequential_book(HYDE_PARAMS)
 print(f"Elapsed time : {time.perf_counter() - start:.1f} s")

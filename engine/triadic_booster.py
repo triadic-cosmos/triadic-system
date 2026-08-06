@@ -1,0 +1,97 @@
+# triadic_booster.py
+from dataclasses import dataclass
+
+from .triadic_llm import TriadicLLM
+
+from dmlg import (
+    AgentBuilder,
+    Configuration,
+    TrainingBatch,
+    CurriculumSentence,
+    CurriculumStory,
+    ContextWindow,
+    WriterAgent,
+    WriterStory,
+    WriterSentence
+)
+
+# Improve the story while keeping original canon
+FIX_PROMPT = (
+"Fix the following short story grammatically and semantically. "
+"Fix broken sentences. Make it a literary masterpiece! "
+"Avoid making it much longer than the original. "
+"Avoid conversations, incoherence and repetition. "
+"Avoid excessive usage of punctuation and commas. "
+"Use only narrative and descriptive story sentences in third person. "
+"End the story with a line containing: The End. "
+"This is the story: "
+)
+
+MAX_TOKENS = 3000
+
+# Creates a booster curriculum from sampling an existing model
+# This booster curriculum can be used to train or augment a model
+@dataclass
+class TriadicBooster:
+    llm: TriadicLLM
+    model_name: str
+    model_prefix: str
+    output_name: str
+
+    def __post_init__(self):
+        self.configuration = Configuration(self.model_name)
+        self.builder = AgentBuilder(self.configuration)
+        self.environment = self.builder.build_environment(self.configuration, self.model_prefix)
+        self.agent: WriterAgent = self.builder.load_or_create_agent(self.environment)
+            
+    # keeps running until stopped
+    def boost(self, epochs: int, nr_lines: int, min_lines: int, max_lines: int, retries: int):
+        iteration = 0
+        output_filename = self.builder.curriculum_filename(self.environment, self.output_name)
+        
+        with open(output_filename, "a", encoding='utf-8-sig') as file:
+            while True:
+                iteration += 1
+                generate_ctx: ContextWindow = self.agent.new_context()
+                
+                for epoch in range(1, epochs + 1):
+                    print(f"Iteration {iteration}, Epoch {epoch}")
+                    
+                    sequence = self.agent.choose_best_embedding(None)
+                    sentences = []
+                    
+                    while len(sentences) < nr_lines:
+                        generate_ctx.clear_current_sentence()
+                        sentence: WriterSentence = self.agent.generate_sentence(sequence, generate_ctx, [])
+                        if sentence:
+                            sentence.fixed = self.environment.grammar.fix_grammar(sentence.natural)
+                            if sentence.natural != sentence.fixed:
+                                continue
+                            self.agent.update_context(generate_ctx, sentence)
+                            sentences.append(sentence)
+                            print(f"G-{len(sentences)}. {sentence.fixed}")
+
+                    writer_story: WriterStory = WriterStory(sentences)
+                    for _ in range(retries):
+                        moderated: List[str] = self.llm.moderate(FIX_PROMPT, f"LLM-{epoch}", writer_story, MAX_TOKENS)
+                        if len(moderated) >= min_lines:                        
+                            cleaned = []
+                            for sentence in moderated:
+                                fixed = self.environment.grammar.fix_grammar(sentence)
+                                if fixed == sentence:
+                                    cleaned.append(fixed)
+                            if min_lines <= len(cleaned) <= max_lines:
+                                break
+                        cleaned = None
+                    if not cleaned:
+                        continue
+
+                    index = 0
+                    for sentence in cleaned:
+                        index += 1
+                        file.write(sentence + "\n")    
+                        print(f"M-{index}. {sentence}")
+                    file.write("\n\n")
+                    file.flush()
+                        
+                print(f">>> Finished iteration {iteration}! <<<")

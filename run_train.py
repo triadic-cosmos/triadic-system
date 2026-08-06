@@ -2,9 +2,9 @@ from engine.triadic_trainer import TriadicTrainer
 
 import time
 
-MODEL = "frankenstein"
-WARMUP_EPOCHS = 10
-VARIANTS = [30]
+MODEL = "hyde"
+WARMUP_EPOCHS = 5
+VARIANTS = [10]
 
 # Training a dataset model with epoch variants
 trainer: TriadicTrainer = TriadicTrainer()

@@ -36,6 +36,25 @@ GRAMMAR_TOKENS = [
     "<EOL>",
 ]
 
+CONJUGATION_TOKENS = {
+    "<VERB-PRESENT>",
+    "<VERB-PRESENT-3S>",
+    "<VERB-PRESENT-1S>",
+    "<VERB-PAST>"    
+}
+
+NOUN_TOKENS = {
+    "<NOUN>",
+    "<NOUN-PLURAL>",
+    "<PROPN>"
+}
+
+NO_PUNCTUATION_TOKENS = {
+    "<DET>",
+    "<SCONJ>",
+    "<CCONJ>"
+}
+
 TERMINAL_TOKENS = {
     "<PERIOD>",
     "<COMMA>",

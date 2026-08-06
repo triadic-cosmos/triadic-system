@@ -76,6 +76,10 @@ class GrammarEngine:
             if person_tag == "<3S>":
                 return "is"
             return "are"
+        
+        # Special case: "will" or "can"
+        if verb == "will" or verb == "can":
+            return verb
 
         doc = self.nlp(verb)
         token = doc[0]

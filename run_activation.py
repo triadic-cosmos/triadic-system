@@ -6,22 +6,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from dmlg import (
+    AgentBuilder,
     TokenPage,
-    GrammarEngine,
-    SemanticEngine,
     WriterAgent,
     Configuration,
-    WriterEnvironment,
-    DATA_FOLDER
+    WriterEnvironment
 )
 
 MODEL_FILENAME = "_model.bin"
-MODEL_PREFIXES = ["30k"]
-MODEL_NAME = "frankenstein"
+MODEL_PREFIXES = ["10k", "boost1", "boost2", "boost3", "boost4", "boost5", "boost6", "boost7", "boost8"]
+MODEL_NAMES = ["hyde"] * 9
 
-def load_agent(name:str, prefix: str) -> WriterAgent:
-    return WriterAgent.load(environment, DATA_FOLDER + name + "/" + prefix + MODEL_FILENAME)  
-    
 def is_nonlinear(x, y, threshold=0.15):
     x_np = x.cpu().numpy().flatten()
     y_np = y.cpu().numpy().flatten()
@@ -39,14 +34,14 @@ def is_nonlinear(x, y, threshold=0.15):
     return mse > threshold, mse
 
 # Main
-configuration = Configuration(MODEL_NAME)
-grammar = GrammarEngine(configuration)
-semantic = SemanticEngine(configuration)
-environment = WriterEnvironment(configuration, grammar, semantic, "gen")
+configuration = Configuration("activation")
+builder = AgentBuilder = AgentBuilder(configuration)
 
 agents = []
-for prefix in MODEL_PREFIXES:
-    agent: WriterAgent = load_agent(MODEL_NAME, prefix)
+for index in range(len(MODEL_NAMES)):
+    config = Configuration(MODEL_NAMES[index])
+    environment = builder.build_environment(config, MODEL_PREFIXES[index])
+    agent: WriterAgent = builder.load_or_create_agent(environment)
     agents.append(agent)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
