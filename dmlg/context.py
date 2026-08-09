@@ -8,9 +8,47 @@ from .narrative_memory import NarrativeMemory
 from .config import Configuration
 
 # ============================================================
-# ContextWindow
+# Current Sentence
 # ============================================================
 
+@dataclass
+class CurrentSentence:
+    configuration: Configuration
+    
+    def __post_init__(self):
+        self.max_lemmas = self.configuration.content_max_lemmas
+        self.cut = self.configuration.sentence_medium_embedding_size
+        self.last_position = self.max_lemmas - 1
+    
+    def clear(self):
+        self.position = 0
+        self.current_embedding = [
+            [0.0] * self.cut for _ in range(self.max_lemmas)
+        ]
+        
+    def add(self, embedding: List[float]):
+        if self.position < self.last_position:
+            vec = embedding[:self.cut]
+            self.current_embedding[self.position] = vec
+            self.position += 1
+            
+    def get(self):
+        cur_pos = self.position / self.last_position
+        flat = []
+        for vec in self.current_embedding:
+            flat.extend(vec)
+        return [cur_pos] + flat
+    
+    def copy(self) -> "CurrentSentence":
+        copy = CurrentSentence(self.configuration)
+        copy.position = self.position
+        copy.current_embedding = [vec.copy() for vec in self.current_embedding]
+        return copy
+      
+# ============================================================
+# Context Window
+# ============================================================
+      
 @dataclass
 class ContextWindow:
     configuration: Configuration
@@ -18,8 +56,9 @@ class ContextWindow:
 
     def __post_init__(self):
         empty_sentence = EncodedSentence.make_empty_sentence(self.configuration)
+        self._current_grammar_sentence = CurrentSentence(self.configuration)        
+        self._current_lemma_sentence = CurrentSentence(self.configuration)
         self.clear_current_sentence()
-        self._last_position = self.configuration.content_max_lemmas - 1        
         self._sentences = [empty_sentence] * self.configuration.context_max_sentences
         self._generator_history_embedding = None
         self._generator_history_sentences = self.configuration.generator_history_sentences
@@ -27,14 +66,8 @@ class ContextWindow:
         self._narrative_memory_embedding = None
         
     def clear_current_sentence(self):
-        self._position = 0
-
-        # USE MEDIUM EMBEDDING SIZE (2 floats)
-        cut = self.configuration.sentence_medium_embedding_size
-
-        self._current_embedding = [
-            [0.0] * cut for _ in range(self.configuration.content_max_lemmas)
-        ]
+        self._current_grammar_sentence.clear()
+        self._current_lemma_sentence.clear()
 
         self._last_token = Token.EOL
         self._forelast_token = Token.EOL
@@ -67,17 +100,13 @@ class ContextWindow:
 
         elif token.is_lemma():
             self._last_lemma = token
-
-            if self._position <= self._last_position:
-                emb = self.lemma_embedding_dict.get_input_embedding(token).embedding
-
-                # CLIP TO MEDIUM SIZE (2 floats)
-                cut = self.configuration.sentence_medium_embedding_size
-                vec = emb[:cut]
-
-                self._current_embedding[self._position] = vec
-                self._position += 1
-
+            emb = self.lemma_embedding_dict.get_input_embedding(token).embedding
+            self._current_lemma_sentence.add(emb)
+            
+        else:
+            emb = self.lemma_embedding_dict.get_input_embedding(token).embedding
+            self._current_grammar_sentence.add(emb)
+            
     def add_sentence(self, sentence: EncodedSentence):
         if len(self._sentences) == self.configuration.context_max_sentences:
             self._sentences.pop()
@@ -94,16 +123,12 @@ class ContextWindow:
         return self._sentences[len(self._sentences) - 1] != EMPTY_SENTENCE
 
     def get_current_embedding(self) -> List[float]:
-        cur_pos = min(1.0, self._position / self.configuration.content_max_lemmas)
-        flat = []
-        for vec in self._current_embedding:
-            flat.extend(vec)
-        return [cur_pos] + flat
+        return self._current_grammar_sentence.get() + self._current_lemma_sentence.get()
 
     def copy_current(self) -> "ContextWindow":
         ctx: ContextWindow = ContextWindow(self.configuration, self.lemma_embedding_dict)
-        ctx._position = self._position
-        ctx._current_embedding = [vec.copy() for vec in self._current_embedding]
+        ctx._current_grammar_sentence = self._current_grammar_sentence.copy()
+        ctx._current_lamma_sentence = self._current_lemma_sentence.copy()
         ctx._last_token = self._last_token
         ctx._forelast_token = self._forelast_token
         ctx._last_lemma = self._last_lemma

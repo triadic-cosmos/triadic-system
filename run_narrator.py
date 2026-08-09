@@ -7,11 +7,11 @@ from engine.triadic_llm import TriadicLLM
 import time
 
 # Parameters
-MIN_CHAPTERS = 15
-MAX_CHAPTERS = 20
+MIN_CHAPTERS = 4
+MAX_CHAPTERS = 15
 CANDIDATES = 5
-MIN_LINES = 20
-RETRIES = 3
+MIN_LINES = 15
+RETRIES = 10
 
 # Comedy sequential book parameters
 COMEDY_PARAMS = TriadicNarratorParams(
@@ -75,7 +75,7 @@ HONEYMOON_PARAMS = TriadicNarratorParams(
 
 # Incremental book parameters
 INCREMENTAL_PARAMS = TriadicNarratorParams(
-    "hyde",
+    "odyssey",
     None,
     ("Rework this draft material into a coherent story, a literary masterpiece. "
     "Make sure there is proper and exciting narrative arc. Fix broken sentences. "
@@ -83,7 +83,7 @@ INCREMENTAL_PARAMS = TriadicNarratorParams(
     "A male main character is called Marvin and a female main character is called Alice. "),
     "Link the sequences maintaining their common theme. Be creative if necessary. ",
     None,
-    "hyde",
+    "odyssey",
     "20k",
     {},
     85,
@@ -135,5 +135,5 @@ def write_incremental_book(params: TriadicNarratorParams):
 
 # Main
 start = time.perf_counter()
-write_sequential_book(HYDE_PARAMS)
+write_incremental_book(INCREMENTAL_PARAMS)
 print(f"Elapsed time : {time.perf_counter() - start:.1f} s")

@@ -12,9 +12,9 @@ class Configuration:
     # GLP model parameters
     # ------------------------------------------------------------
     glp_hidden_size: int = 1280
-    activation_hidden_size: int = 64
+    activation_hidden_size: int = 72
     lemma_input_dimension: int = 32
-    lemma_output_dimension: int = 256
+    lemma_output_dimension: int = 128
     total_pages: int = 256
 
     # ------------------------------------------------------------
@@ -22,7 +22,8 @@ class Configuration:
     # ------------------------------------------------------------
     learn_alpha: float = 0.2
     alpha_damping: float = 100
-    max_alpha_transitions: int = 3_000_000
+    alpha_transitions_epoch_multiplier = 300
+    max_alpha_transitions: int = 1_000_000
 
     # ------------------------------------------------------------
     # Context parameters
@@ -52,7 +53,7 @@ class Configuration:
     # ------------------------------------------------------------
     warmup_epochs: int = 1
     random_epochs: int = 1000
-    epochs_step: int = 5
+    epochs_step: int = 1
 
     # ------------------------------------------------------------
     # Generation parameters
@@ -84,8 +85,8 @@ class Configuration:
         )
 
     def generator_current_context_size(self) -> int:
-        # current_position (1)
-        return self.content_max_lemmas * self.sentence_medium_embedding_size + 1
+        # grammar and lemma, current_position (1)
+        return 2 * (self.content_max_lemmas * self.sentence_medium_embedding_size + 1)
 
     def generator_input_size(self) -> int:
         # sequence embedding (8)

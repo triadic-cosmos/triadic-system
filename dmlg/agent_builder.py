@@ -12,7 +12,7 @@ from .sentence_encoder import SentenceEncoder
 from .curriculum import Curriculum
 from .tokens import TokenPage
 
-DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v6/"
+DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v7/"
 MODEL_FILENAME: str = "_model.bin"
 TOKENS_FILENAME: str = "_tokens.txt"
 OUTPUT_FILENAME: str = "_output.txt"
@@ -77,9 +77,16 @@ class AgentBuilder:
         random_epochs = environment.configuration.random_epochs
         print(f"warmup epochs = {warmup_epochs}")
         print(f"train epochs = {random_epochs}")
-   
+
         agent: WriterAgent = self.load_or_create_agent(environment)
-        
+
+        # determine maximum alpha transitions using multiplier and random epochs
+        if environment.configuration.alpha_transitions_epoch_multiplier > 0:
+            max_alpha_transitions = environment.configuration.alpha_transitions_epoch_multiplier * random_epochs
+            environment.configuration.max_alpha_transitions = max_alpha_transitions
+            agent.environment.configuration.max_alpha_transitions = max_alpha_transitions
+            print(f"max alpha transitions = {max_alpha_transitions}")
+
         agent.build_index_from_curriculum(curriculum)
         print(f"keywords = {len(agent.keyword_map)}")
         

@@ -32,10 +32,13 @@ class NeuralNetwork(nn.Module):
         self.hidden_size = hidden_size
         self.output_size = output_size
 
+        # linear layers: input → h1 → h2 → h3 → h4 → output
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, output_size)
-        
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        self.fc4 = nn.Linear(hidden_size, hidden_size)
+        self.fc5 = nn.Linear(hidden_size, output_size)
+
         self.activation: ActivationMLP = activation
         self.act = AMLPActivation(activation)
 
@@ -44,4 +47,6 @@ class NeuralNetwork(nn.Module):
     def forward(self, x):
         h = self.act(self.fc1(x))
         h = self.act(self.fc2(h))
-        return self.fc3(h)
+        h = self.act(self.fc3(h))
+        h = self.act(self.fc4(h))        
+        return self.fc5(h)
