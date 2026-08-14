@@ -26,18 +26,19 @@ class AMLPActivation(nn.Module):
 
 # Main MLP
 class NeuralNetwork(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, activation):
+    def __init__(self, input_size, first_hidden_size, other_hidden_size, output_size, activation):
         super().__init__()
         self.input_size = input_size
-        self.hidden_size = hidden_size
+        self.first_hidden_size = first_hidden_size
+        self.other_hidden_size = other_hidden_size
         self.output_size = output_size
 
         # linear layers: input → h1 → h2 → h3 → h4 → output
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, hidden_size)
-        self.fc4 = nn.Linear(hidden_size, hidden_size)
-        self.fc5 = nn.Linear(hidden_size, output_size)
+        self.fc1 = nn.Linear(input_size, first_hidden_size)
+        self.fc2 = nn.Linear(first_hidden_size, other_hidden_size)
+        self.fc3 = nn.Linear(other_hidden_size, other_hidden_size)
+        self.fc4 = nn.Linear(other_hidden_size, other_hidden_size)
+        self.fc5 = nn.Linear(other_hidden_size, output_size)
 
         self.activation: ActivationMLP = activation
         self.act = AMLPActivation(activation)

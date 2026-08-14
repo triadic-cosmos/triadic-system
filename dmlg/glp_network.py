@@ -69,7 +69,8 @@ class GlpNetwork:
         self.glp_activation = ActivationMLP(self.configuration.activation_hidden_size)
         self.glp_network = NeuralNetwork(
             self.configuration.generator_input_size(),
-            self.configuration.glp_hidden_size,
+            self.configuration.first_hidden_size,
+            self.configuration.other_hidden_size,
             self.configuration.generator_output_size(),
             self.glp_activation,
         )

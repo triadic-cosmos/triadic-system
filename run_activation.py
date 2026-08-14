@@ -14,8 +14,8 @@ from dmlg import (
 )
 
 MODEL_FILENAME = "_model.bin"
-MODEL_PREFIXES = ["20k"]
-MODEL_NAMES = ["odyssey"] * 1
+MODEL_PREFIXES = ["40k", "50k"]
+MODEL_NAMES = ["planet"] * 2
 
 def is_nonlinear(x, y, threshold=0.15):
     x_np = x.cpu().numpy().flatten()

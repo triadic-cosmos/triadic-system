@@ -54,6 +54,10 @@ class WriterAgent:
 
     def train_story(self, epoch: int, story: CurriculumStory,
                     context_window: ContextWindow, batch: TrainingBatch) -> TrainingBatch:
+        # check if story is trained with empty context
+        if self.configuration.clear_context:
+            context_window = self.new_context()
+        
         for sentence in story.sentences:
             # 1. train for each token
             for tok in sentence.tokens:
@@ -76,7 +80,6 @@ class WriterAgent:
         return batch
 
     def train_curriculum(self, curriculum: Curriculum, warmup_epochs: int, random_epochs: int):
-        # Reuse context for all epochs
         context_window = self.new_context()
         batch = TrainingBatch()
 

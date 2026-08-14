@@ -24,11 +24,13 @@ FIX_PROMPT = (
 "Avoid introducing a lot of new vocabulary. "
 "Avoid excessive usage of punctuation and commas. "
 "Use only narrative and descriptive story sentences in third person. "
+"Keep all sentences short and simple like in an essay of a teenager! "
 "End the story with a line containing: The End. "
 "This is the story: "
 )
 
 MAX_TOKENS = 3000
+MAX_ATTEMPTS = 10
 
 # Creates a booster curriculum from sampling an existing model
 # This booster curriculum can be used to train or augment a model
@@ -54,14 +56,18 @@ class TriadicBooster:
                 epoch += 1
                 sequence = self.agent.choose_best_embedding(None)
                 sentences = []
+                attempts = 0
                 
                 while len(sentences) < nr_lines:
                     generate_ctx.clear_current_sentence()
                     sentence: WriterSentence = self.agent.generate_sentence(sequence, generate_ctx, [])
                     if sentence:
                         sentence.fixed = self.environment.grammar.fix_grammar(sentence.natural)
-                        if sentence.natural != sentence.fixed:
+                        # avoid stalling by using maximum number of attempts
+                        if sentence.natural != sentence.fixed and attempts < MAX_ATTEMPTS:
+                            attempts += 1
                             continue
+                        attempts = 0
                         self.agent.update_context(generate_ctx, sentence)
                         sentences.append(sentence)
                         print(f"G-{len(sentences)}. {sentence.fixed}")

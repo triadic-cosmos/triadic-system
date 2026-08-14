@@ -11,7 +11,8 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    glp_hidden_size: int = 1280
+    first_hidden_size: int = 1280
+    other_hidden_size: int = 640
     activation_hidden_size: int = 72
     lemma_input_dimension: int = 32
     lemma_output_dimension: int = 128
@@ -20,9 +21,9 @@ class Configuration:
     # ------------------------------------------------------------
     # Learnable output lemma embedding
     # ------------------------------------------------------------
-    learn_alpha: float = 0.2
-    alpha_damping: float = 100
-    alpha_transitions_epoch_multiplier = 300
+    learn_alpha: float = 0.05
+    alpha_damping: float = 1
+    alpha_transitions_epoch_multiplier = 0
     max_alpha_transitions: int = 1_000_000
 
     # ------------------------------------------------------------
@@ -53,7 +54,8 @@ class Configuration:
     # ------------------------------------------------------------
     warmup_epochs: int = 1
     random_epochs: int = 1000
-    epochs_step: int = 1
+    epochs_step: int = 5
+    clear_context: bool = True
 
     # ------------------------------------------------------------
     # Generation parameters
