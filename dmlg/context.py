@@ -56,6 +56,7 @@ class ContextWindow:
 
     def __post_init__(self):
         empty_sentence = EncodedSentence.make_empty_sentence(self.configuration)
+        self._current_tokens = []
         self._current_grammar_sentence = CurrentSentence(self.configuration)        
         self._current_lemma_sentence = CurrentSentence(self.configuration)
         self.clear_current_sentence()
@@ -66,6 +67,7 @@ class ContextWindow:
         self._narrative_memory_embedding = None
         
     def clear_current_sentence(self):
+        self._current_tokens = []
         self._current_grammar_sentence.clear()
         self._current_lemma_sentence.clear()
 
@@ -85,13 +87,12 @@ class ContextWindow:
         return self._forelast_token
 
     def last_lemma_token(self) -> str:
-        lemma_text = self._last_lemma.text
-        last_text = self._last_token.text
-        if lemma_text == last_text:
-            return lemma_text
-        return lemma_text + last_text
+        if self._last_token.is_eol():
+            return Token.EOL.text
+        return self._last_lemma.text
 
     def add_token(self, token: Token):
+        self._current_tokens.append(token)
         self._forelast_token = self._last_token
         self._last_token = token
 
@@ -119,14 +120,12 @@ class ContextWindow:
         self._narrative_memory.update_from_sentence(tokens)
         self._narrative_memory_embedding = None
             
-    def is_filled(self):
-        return self._sentences[len(self._sentences) - 1] != EMPTY_SENTENCE
-
     def get_current_embedding(self) -> List[float]:
         return self._current_grammar_sentence.get() + self._current_lemma_sentence.get()
-
+    
     def copy_current(self) -> "ContextWindow":
         ctx: ContextWindow = ContextWindow(self.configuration, self.lemma_embedding_dict)
+        ctc._current_tokens = self._current_tokens.copy()
         ctx._current_grammar_sentence = self._current_grammar_sentence.copy()
         ctx._current_lamma_sentence = self._current_lemma_sentence.copy()
         ctx._last_token = self._last_token
@@ -135,7 +134,11 @@ class ContextWindow:
         ctx._sentences = self._sentences
         ctx._generator_history_embedding = self._generator_history_embedding
         return ctx
-        
+    
+    @property
+    def current_tokens(self) -> List[Token]:
+        return self._current_tokens
+    
     def get_generator_history_embedding(self) -> List[float]:
         if self._generator_history_embedding == None:
             self._generator_history_embedding = get_history_embedding(
@@ -176,6 +179,7 @@ def get_history_embedding(sentences: List[EncodedSentence], amounts: List[int]) 
 class ModelInput:
     window: ContextWindow
     sequence_embedding: List[float]
+    line_number: List[float]
 
 # ============================================================
 # InputEncoder
@@ -188,10 +192,12 @@ class InputEncoder:
         current_embedding = model_input.window.get_current_embedding()
         narrative_embedding = model_input.window.get_narrative_memory_embedding()
         sequence_embedding = model_input.sequence_embedding
+        line_number = model_input.line_number
         
         return (
             history_embedding
             + current_embedding
             + narrative_embedding
             + sequence_embedding
+            + line_number
         )

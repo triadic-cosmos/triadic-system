@@ -14,33 +14,17 @@ from .tokens import (
     TokenLogit,
     TokenPage,
     LemmaEmbeddingDictionary,
-    GRAMMAR_TOKENS,
-    NO_PUNCTUATION_TOKENS,
-    CONJUGATION_TOKENS,
-    NOUN_TOKENS
+    GRAMMAR_TOKENS
 )
 from .sentence_encoder import SentenceEncoder
 from .context import ModelInput, InputEncoder
-from .neural import NeuralNetwork, ActivationMLP
+from .neural import NeuralNetwork
+from .training import TrainingSample, TrainingBatch
+from .rulebased import RuleBasedFilter
 
-# ============================================================
-# TrainingSample
-# ============================================================
+PAGE_ROUTING: bool = True
 
-@dataclass
-class TrainingSample:
-    input_vector: List[float]
-    target: TargetToken      # grammar + lemma
-    page_index: int          # -1 for terminals
-
-# ============================================================
-# TrainingBatch
-# ============================================================
-
-@dataclass
-class TrainingBatch:
-    samples: List[TrainingSample] = field(default_factory=list)
-    training_count: int = 0
+RULE_BASED: RuleBasedFilter = RuleBasedFilter()
 
 # ============================================================
 # GlpNetwork
@@ -52,7 +36,6 @@ class GlpNetwork:
     token_dictionary: TokenDictionary
     encoder: InputEncoder = field(init=False)
 
-    glp_activation: ActivationMLP = field(init=False)
     glp_network: NeuralNetwork = field(init=False)
 
     grammar_tokens: List[Token] = field(init=False)
@@ -66,13 +49,11 @@ class GlpNetwork:
         self.encoder = InputEncoder()
 
         # monolithic network
-        self.glp_activation = ActivationMLP(self.configuration.activation_hidden_size)
         self.glp_network = NeuralNetwork(
             self.configuration.generator_input_size(),
             self.configuration.first_hidden_size,
             self.configuration.other_hidden_size,
-            self.configuration.generator_output_size(),
-            self.glp_activation,
+            self.configuration.generator_output_size()
         )
 
         self.lemma_embedding_dict = self.create_lemma_embedding_dictionary()        
@@ -88,19 +69,9 @@ class GlpNetwork:
                 self.configuration.lemma_input_dimension,
                 self.configuration.lemma_output_dimension)
 
-    # reduce alpha to train embeddings in function of number of epochs
-    def _current_alpha(self, training_count: int) -> float:
-        alpha_max = self.configuration.learn_alpha
-        alpha_min = alpha_max / self.configuration.alpha_damping
-        T = self.configuration.max_alpha_transitions
-
-        if training_count >= T:
-            return alpha_min
-
-        factor = 1.0 - (training_count / T)  # from 1 to 0
-        return alpha_min + (alpha_max - alpha_min) * factor
-
-    def _update_lemma_embeddings_after_batch(self, samples: List[TrainingSample], alpha: float):
+    def _update_lemma_embeddings_after_batch(self, samples: List[TrainingSample]):
+        alpha: float = self.configuration.learn_alpha
+        
         for s in samples:
             x = torch.tensor([s.input_vector], dtype=torch.float32)
             with torch.no_grad():
@@ -114,8 +85,9 @@ class GlpNetwork:
             emb_obj.update(embedding_pred.tolist(), alpha)
             
     # ------------------------------------------------------------
-    # Learning
+    # Token Learning
     # ------------------------------------------------------------
+    
     def learn(self, model_input: ModelInput, target: Token, batch: TrainingBatch):
         # TERMINAL CASE
         if target.is_terminal():
@@ -152,6 +124,7 @@ class GlpNetwork:
 
             else:
                 page = min(self.page_list, key=lambda p: p.input_size())
+                page.add_input_token(prev_lemma)
 
             self.pages[prev_lemma] = page
 
@@ -173,12 +146,12 @@ class GlpNetwork:
 
         self._learn_glp(batch.samples)
 
-        alpha = self._current_alpha(batch.training_count)
-        self._update_lemma_embeddings_after_batch(batch.samples, alpha)
+        self._update_lemma_embeddings_after_batch(batch.samples)
 
     # ------------------------------------------------------------
-    # Monolithic learning
+    # Sample Learning
     # ------------------------------------------------------------
+    
     def _learn_glp(self, samples: List[TrainingSample]):
         xs = torch.tensor([s.input_vector for s in samples], dtype=torch.float32)
         pred = self.glp_network(xs)
@@ -245,42 +218,7 @@ class GlpNetwork:
     # ------------------------------------------------------------
     # Inference
     # ------------------------------------------------------------
-    def determine_incompatible_grammar(self, model_input: ModelInput) -> set:
-        last_grammar = model_input.window.last_grammar_token()
-        if last_grammar.text in CONJUGATION_TOKENS:
-            return CONJUGATION_TOKENS
-        if last_grammar.text in NOUN_TOKENS:
-            return NOUN_TOKENS
-        return set()
-            
-    def select_terminal_token(self, target: TargetToken, model_input: ModelInput) -> bool:
-        grammar = target.grammar
-        last = model_input.window.last_token()
-
-        # 1. Prevent repeating the same terminal
-        if last.text == grammar.text:
-            return False
-
-        # 2. EOL rules
-        if grammar.is_eol():
-            if not last.is_end_punctuation():
-                return False
-            return True
-
-        # 3. Punctuation rules
-        if grammar.is_all_punctuation():
-            if last.is_all_punctuation():
-                return False
-            if last.is_terminal():
-                return False
-            forelast = model_input.window.forelast_token()
-            if forelast.text in NO_PUNCTUATION_TOKENS:
-                return False
-            return True
-
-        # 4. Default: allowed
-        return True
-
+    
     def propose(self, model_input: ModelInput):
         # deterministic end of line after end punctuation
         if model_input.window.last_token().is_end_punctuation():
@@ -290,21 +228,35 @@ class GlpNetwork:
         with torch.no_grad():
             pred = self.glp_network(x).squeeze(0)
 
-        lemma_dim = self.configuration.lemma_output_dimension
-        page_dim = self.configuration.total_pages
-
         # split output
+        lemma_dim = self.configuration.lemma_output_dimension
         lemma_pred = F.normalize(pred[:lemma_dim], p=2, dim=0)
-        page_pred = pred[lemma_dim : ]
 
         # --- PAGE ROUTING ---
-        page_scores = [(i, float(page_pred[i])) for i in range(len(self.page_list))]
-        page_scores.sort(key=lambda t: t[1], reverse=True)
+        if PAGE_ROUTING:
+            last_lemma = model_input.window.last_lemma_token()
+            page = self.pages.get(last_lemma, None)
+            if page:
+                found_page = self.page_list.index(page)
+            else:
+                # fallback to initial page
+                found_page = 0
+            page_scores = [(found_page, 1.0)]
+        # --- MODEL ROUTING ---
+        else:
+            page_pred = pred[lemma_dim : ]
+            page_scores = [(i, float(page_pred[i])) for i in range(len(self.page_list))]
+            page_scores.sort(key=lambda t: t[1], reverse=True)
+
+        # Determine incompatible tokens
+        min_tokens = self.configuration.min_words * 2
+        incompatible_grammar = RULE_BASED.determine_incompatible_grammar(model_input, min_tokens)
+        incompatible_lemma = RULE_BASED.determine_incompatible_lemma(model_input)
 
         # TERMINAL TOKENS: implicitly present in each page
         terminal_pairs: List[TokenLogit] = []
         for terminal in TargetToken.TERMINALS:
-            if self.select_terminal_token(terminal, model_input):
+            if not terminal.grammar.text in incompatible_grammar:
                 emb = torch.tensor(
                     self.lemma_embedding_dict.get_output_embedding(terminal).embedding,
                     dtype=torch.float32,
@@ -315,8 +267,6 @@ class GlpNetwork:
                     TokenLogit(grammar=terminal.grammar, lemma=terminal.lemma, logit=cos)
                 )
 
-        incompatible_grammar = self.determine_incompatible_grammar(model_input)
-
         # --- PAGE LOOP ---
         for page_idx, _ in page_scores:
             page = self.page_list[page_idx]
@@ -324,7 +274,8 @@ class GlpNetwork:
                     
             # LEMMA TOKENS: from page, paired with grammar_top
             for tok in page.output_tokens:
-                if not tok.grammar.text in incompatible_grammar:
+                if not tok.grammar.text in incompatible_grammar and \
+                   not tok.lemma.lower_text in incompatible_lemma:
                     emb = torch.tensor(
                         self.lemma_embedding_dict.get_output_embedding(tok).embedding,
                         dtype=torch.float32,

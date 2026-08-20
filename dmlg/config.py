@@ -11,27 +11,18 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 1280
-    other_hidden_size: int = 640
-    activation_hidden_size: int = 72
+    first_hidden_size: int = 1024
+    other_hidden_size: int = 512
     lemma_input_dimension: int = 32
-    lemma_output_dimension: int = 128
+    lemma_output_dimension: int = 64
     total_pages: int = 256
-
-    # ------------------------------------------------------------
-    # Learnable output lemma embedding
-    # ------------------------------------------------------------
-    learn_alpha: float = 0.05
-    alpha_damping: float = 1
-    alpha_transitions_epoch_multiplier = 0
-    max_alpha_transitions: int = 1_000_000
 
     # ------------------------------------------------------------
     # Context parameters
     # ------------------------------------------------------------
     generator_history_sentences = [5, 15]
     context_max_sentences = 80
-    content_max_lemmas = 30
+    content_max_lemmas = 40
 
     # ------------------------------------------------------------
     # Context embeddings
@@ -52,10 +43,10 @@ class Configuration:
     # ------------------------------------------------------------
     # Training parameters
     # ------------------------------------------------------------
-    warmup_epochs: int = 1
+    learn_alpha: float = 0.001
     random_epochs: int = 1000
-    epochs_step: int = 5
-    clear_context: bool = True
+    epochs_step: int = 10
+    story_prompt: bool = True
 
     # ------------------------------------------------------------
     # Generation parameters
@@ -64,14 +55,15 @@ class Configuration:
     max_words: int = 30
     max_tokens: int = 70
     story_lines: int = 20
-    max_attempts: int = 20000
+    max_attempts: int = 10000
+    line_divider: float = 20
 
     # Sampling
     top_k: int = 20
     temperature: float = 0.8
 
     # Beam-search
-    nr_of_beams: int = 5
+    nr_of_beams: int = 3
     beam_alpha: float = 0.8
     beam_jitter: float = 0.5
     beam_attempts: int = 3
@@ -91,8 +83,8 @@ class Configuration:
         return 2 * (self.content_max_lemmas * self.sentence_medium_embedding_size + 1)
 
     def generator_input_size(self) -> int:
-        # sequence embedding (8)
-        return self.generator_history_context_size() + self.generator_current_context_size() + self.narrative_state_size + 8
+        # sequence embedding (8) + line number (1)
+        return self.generator_history_context_size() + self.generator_current_context_size() + self.narrative_state_size + 9
 
     def generator_output_size(self) -> int:
         # grammar + pages + lemma embedding

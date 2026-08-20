@@ -127,9 +127,11 @@ class Curriculum:
             
             for line in lines:
                 if line == "":
-                    if (len(sentences) > 0):                
+                    if len(sentences) > 0:                
                         self.stories.append(CurriculumStory(sentences))
-                    sentences = []
+                        sentences = []
+                        if len(self.stories) >= environment.configuration.max_stories:
+                            break                    
                 else:                    
                     natural = environment.grammar.convert_from_canonical(line)
                     tokens = [self.token_dictionary.add_and_get(token) for token in line.split(" ") if token != ""]
@@ -138,10 +140,10 @@ class Curriculum:
             if (len(sentences) > 0):                
                 self.stories.append(CurriculumStory(sentences))
             print(f"curriculum stories = {len(self.stories)}")
-
+                        
 def preprocess_line(line: str) -> str:
     line = re \
-        .sub("[‑\-—_\“\”‘]", " ", line) \
+        .sub("[\[\]‑\-—_\“\”‘]", " ", line) \
         .replace("!)", ",") \
         .replace("),", ",") \
         .replace("[;:()]", ",") \

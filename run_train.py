@@ -2,9 +2,8 @@ from engine.triadic_trainer import TriadicTrainer
 
 import time
 
-MODEL = "planet"
-WARMUP_EPOCHS = 1
-VARIANTS = [50]
+MODEL = "mix"
+VARIANTS = [10]
 
 # Training a dataset model with epoch variants
 trainer: TriadicTrainer = TriadicTrainer()
@@ -15,6 +14,6 @@ for variant in VARIANTS:
     prefix = f"{variant}k"
     train_epochs = variant * 1000
 
-    trainer.train(MODEL, prefix, WARMUP_EPOCHS, train_epochs)
+    trainer.train(MODEL, prefix, train_epochs)
 
     print(f"Training time {prefix}: {time.perf_counter() - start:.1f} s")

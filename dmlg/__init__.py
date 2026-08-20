@@ -64,6 +64,13 @@ from .curriculum import (
     CurriculumSentence,
 )
 
+# --- Training -------------------------------------------------------------
+
+from .training import (
+    TrainingSample,
+    TrainingBatch
+)
+
 # --- Neural / Network -----------------------------------------------------
 
 from .neural import NeuralNetwork

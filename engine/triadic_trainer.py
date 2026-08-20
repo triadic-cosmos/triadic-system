@@ -13,16 +13,15 @@ from dmlg import (
 
 @dataclass
 class TriadicTrainer:
-    def train(self, name: str, prefix: str, warmup_epochs: int, random_epochs: int):
+    def train(self, name: str, prefix: str, random_epochs: int):
         print("Reading curriculum...")
         configuration = Configuration(name)
-        configuration.warmup_epochs = warmup_epochs
         configuration.random_epochs = random_epochs
         
         builder = AgentBuilder(configuration)
         environment = builder.build_environment(configuration, prefix)
         curriculum = builder.build_curriculum(environment, "book")
-
+        
         print("Training agent...")
         builder.train_agent(environment, curriculum)
         

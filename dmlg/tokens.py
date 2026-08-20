@@ -36,25 +36,6 @@ GRAMMAR_TOKENS = [
     "<EOL>",
 ]
 
-CONJUGATION_TOKENS = {
-    "<VERB-PRESENT>",
-    "<VERB-PRESENT-3S>",
-    "<VERB-PRESENT-1S>",
-    "<VERB-PAST>"    
-}
-
-NOUN_TOKENS = {
-    "<NOUN>",
-    "<NOUN-PLURAL>",
-    "<PROPN>"
-}
-
-NO_PUNCTUATION_TOKENS = {
-    "<DET>",
-    "<SCONJ>",
-    "<CCONJ>"
-}
-
 TERMINAL_TOKENS = {
     "<PERIOD>",
     "<COMMA>",
@@ -141,6 +122,10 @@ class Token:
     @property
     def text(self) -> str:
         return self._text
+
+    @property
+    def lower_text(self) -> str:
+        return self._text.lower()
 
     @property
     def id(self) -> int:

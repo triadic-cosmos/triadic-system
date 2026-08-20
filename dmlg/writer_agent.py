@@ -52,64 +52,28 @@ class WriterAgent:
     # Learning and curriculum training
     # ------------------------------------------------------------
 
-    def train_story(self, epoch: int, story: CurriculumStory,
-                    context_window: ContextWindow, batch: TrainingBatch) -> TrainingBatch:
-        # check if story is trained with empty context
-        if self.configuration.clear_context:
-            context_window = self.new_context()
-        
-        for sentence in story.sentences:
-            # 1. train for each token
-            for tok in sentence.tokens:
-                target = self.token_dictionary.add_and_get(tok.text)
-                model_input = ModelInput(context_window, story.embedding)
-                self.training_count += 1
-                self.glp_network.learn(model_input, target, batch)
-                model_input.window.add_token(target)
-
-            # 2. context / narrative for each sentence
-            dict_tokens = [self.token_dictionary.add_and_get(t.text) for t in sentence.tokens]
-            encoded = sentence.get_encoded(self.glp_network.sentence_encoder)
-            context_window.add_sentence(encoded)
-            context_window.update_narrative_memory(dict_tokens)
-
-        if epoch % self.environment.configuration.epochs_step == 0:
+    def learn_batch(self, epoch: int, batch: TrainingBatch) -> TrainingBatch:
+        if batch.has_samples():
             print(epoch)
-            self.learn_batch(batch)
+            self.glp_network.learn_batch(batch)
+            self.training_count += len(batch.samples) 
             return TrainingBatch()
-        return batch
+        else:
+            return batch
 
-    def train_curriculum(self, curriculum: Curriculum, warmup_epochs: int, random_epochs: int):
-        context_window = self.new_context()
-        batch = TrainingBatch()
+    def train_curriculum(self, curriculum: Curriculum, random_epochs: int):
+        super_batch: TrainingBatch = TrainingBatch()
 
-        # Train sequences using order curriculum 
-        warmup_epoch = 1
-        for _ in range(warmup_epochs):
-            for story in curriculum.stories:
-                batch = self.train_story(warmup_epoch, story, context_window, batch)
-                warmup_epoch += 1
-
-        self.learn_batch(batch)
-        self.show()
-
-        # New batch
-        batch = TrainingBatch()
-        
         # Train sequences using random order
         for epoch in range(1, random_epochs + 1):
-            story = curriculum.get_random_story(self.rng)
-            batch = self.train_story(epoch, story, context_window, batch)
+            story: CurriculumStory = curriculum.get_random_story(self.rng)
+            super_batch.append(story.batch)
+            if epoch % self.configuration.epochs_step == 0:
+                super_batch = self.learn_batch(epoch, super_batch)
         
-        self.learn_batch(batch)
+        self.learn_batch(random_epochs + 1, super_batch)            
         self.show()
-
-    def learn_batch(self, batch: TrainingBatch):
-        if len(batch.samples) == 0:
-            return
-        batch.training_count = self.training_count
-        self.glp_network.learn_batch(batch)
-
+        
     # ------------------------------------------------------------
     # Curriculum story indexing
     # ------------------------------------------------------------
@@ -267,11 +231,12 @@ class WriterAgent:
                 keywords.add(token.text)
         return keywords
 
-    def generate_sentence(self, sequence: List[float], ctx: ContextWindow, sentences: List[str]) -> WriterSentence:
+    def generate_sentence(self, model_input: ModelInput, sentences: List[str]) -> WriterSentence:
         generated: List[Token] = []
+        ctx: ContextWindow = model_input.window
 
         for _ in range(self.max_tokens):
-            proposal: TokenLogit = self.propose_token(ModelInput(ctx, sequence))
+            proposal: TokenLogit = self.propose_token(model_input)
             if proposal is None:
                 break
 
@@ -293,7 +258,7 @@ class WriterAgent:
                 # grammar validation on canonical tokens
                 if self.environment.grammar.basic_validate_grammar_tokens(generated):
                     natural = self.environment.grammar.convert_from_canonical_tokens(generated)
-
+            
                     # semantic validation
                     if self.environment.semantic.validate(sentences, natural):
                         return WriterSentence(generated, natural)
@@ -307,7 +272,7 @@ class WriterAgent:
         return None
 
     def generate_sentence_beam_search(
-        self, sequence: List[float], ctx: ContextWindow,
+        self, model_input: ModelInput,
         keyword_scores: dict, used_tokens: set, sentences: List[str]
     ) -> WriterSentence:
 
@@ -326,7 +291,7 @@ class WriterAgent:
         nr_of_beams = self.environment.configuration.nr_of_beams
 
         # --- initialize ---
-        beams: List[Beam] = [Beam([], ctx.copy_current(), 0)]
+        beams: List[Beam] = [Beam([], model_input.window.copy_current(), 0)]
         best_sentence = None
         best_score = None
 
@@ -344,7 +309,7 @@ class WriterAgent:
 
                 # GLP propose(): returns grammar+lemma pairs sorted by score
                 outputs: List[TokenLogit] = self.glp_network.propose(
-                    ModelInput(beam.ctx, sequence)
+                    ModelInput(beam.ctx, model_input.sequence_embedding, model_input.line_number)
                 )
 
                 if not outputs:
@@ -431,21 +396,24 @@ class WriterAgent:
         for sentence in story.sentences:
             sentence.fixed = self.environment.grammar.fix_grammar(sentence.natural) 
     
-    def update_context(self, ctx: ContextWindow, sentence: WriterSentence):
-        encoded = self.glp_network.sentence_encoder.encode_sentence(sentence.tokens)
+    def update_context_tokens(self, ctx: ContextWindow, tokens: List[Token]):
+        encoded = self.glp_network.sentence_encoder.encode_sentence(tokens)
         ctx.add_sentence(encoded)
-        ctx.update_narrative_memory(sentence.tokens)
+        ctx.update_narrative_memory(tokens)
+            
+    def update_context(self, ctx: ContextWindow, sentence: WriterSentence):
+        self.update_context_tokens(ctx, sentence.tokens)
 
     def write_story(
         self,
         prefix: str,
         ctx: ContextWindow,
-        prompt: str = None,
+        prompt: List[str] = None,
         keywords: Set[str] = None,
         beam_search: bool = False
     ) -> WriterStory:
 
-        index: int = 0
+        line_nr: int = 0
         lines: int = self.environment.configuration.story_lines
 
         # 1. Choose sequence embedding
@@ -453,17 +421,10 @@ class WriterAgent:
 
         # 2. Prompt injection
         if prompt is not None and len(prompt) > 0:
-            while True:
-                for prompt_line in prompt:
-                    raw_tokens = self.environment.grammar.convert_to_canonical_tokens(prompt_line)
-                    tokens = [self.token_dictionary.add_and_get(t.text) for t in raw_tokens]
-
-                    encoded = self.glp_network.sentence_encoder.encode_sentence(tokens)
-                    ctx.add_sentence(encoded)
-                    ctx.update_narrative_memory(tokens)
-
-                if ctx.is_filled():
-                    break
+            for prompt_line in prompt:
+                raw_tokens = self.environment.grammar.convert_to_canonical_tokens(prompt_line)
+                tokens = [self.token_dictionary.add_and_get(t.text) for t in raw_tokens]
+                self.update_context_tokens(ctx, tokens)
 
         sentences = []
         writer_sentences = []
@@ -481,11 +442,13 @@ class WriterAgent:
         for _ in range(self.environment.configuration.max_attempts):
             ctx.clear_current_sentence()
 
+            line = [line_nr / self.configuration.line_divider]
+            model_input = ModelInput(ctx, sequence_embedding, line)
+
             # --- BEAM SEARCH MODE ---
             if beam_search and beam_attempts > 0 and keywords is not None:
                 sentence = self.generate_sentence_beam_search(
-                    sequence_embedding,
-                    ctx,
+                    model_input,
                     keyword_scores,
                     used_tokens,
                     sentences
@@ -503,12 +466,12 @@ class WriterAgent:
 
             # --- NORMAL MODE ---
             else:
-                sentence = self.generate_sentence(sequence_embedding, ctx, sentences)
+                sentence = self.generate_sentence(model_input, sentences)
                 if not sentence:
                     continue
 
             # 4. Log progress
-            print(f"{index}", end=" ")
+            print(f"{line_nr}", end=" ")
 
             # 5. Update story
             sentences.append(sentence.natural)
@@ -517,8 +480,8 @@ class WriterAgent:
             # 6. Update context window
             self.update_context(ctx, sentence)
 
-            index += 1
-            if index == lines:
+            line_nr += 1
+            if line_nr == lines:
                 break
 
             beam_attempts = self.configuration.beam_attempts
@@ -546,10 +509,10 @@ class WriterAgent:
 
         with open(output_path, "w", encoding="utf-8-sig") as file:
             while index <= amount:
-                # 1. New context for each story
+                # Create new context
                 ctx = self.new_context()
 
-                # 2. Generate story
+                # Generate story
                 story = self.write_story(
                     prefix=f"STORY-{index}",
                     ctx=ctx,
@@ -558,7 +521,7 @@ class WriterAgent:
                     beam_search=beam_search
                 )
 
-                # 3. Write fixed sentences to output
+                # Write fixed sentences to output
                 for sentence in story.sentences:
                     file.write(sentence.fixed + "\n")
 

@@ -6,16 +6,64 @@ from pathlib import Path
 from .grammar import GrammarEngine
 from .semantic import SemanticEngine
 from .config import Configuration
-from .writer_agent import WriterAgent
+from .context import ContextWindow
+from .writer_agent import WriterAgent, ModelInput
 from .writer_environment import WriterEnvironment
 from .sentence_encoder import SentenceEncoder
-from .curriculum import Curriculum
+from .curriculum import Curriculum, CurriculumStory, CurriculumSentence
 from .tokens import TokenPage
+from .training import TrainingBatch, TrainingSample
 
 DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v7/"
 MODEL_FILENAME: str = "_model.bin"
 TOKENS_FILENAME: str = "_tokens.txt"
 OUTPUT_FILENAME: str = "_output.txt"
+
+@dataclass
+class TrainingBatchBuilder:
+    agent: WriterAgent
+
+    def update_context(self, sentence: CurriculumSentence, context: ContextWindow):
+        encoded = sentence.get_encoded(self.agent.glp_network.sentence_encoder)
+        context.add_sentence(encoded)
+        context.update_narrative_memory(sentence.tokens)
+
+    def build_story(self, index: int, story: CurriculumStory, context: ContextWindow):
+        configuration = self.agent.configuration
+        story.batch: TrainingBatch = TrainingBatch()
+        
+        # check if story is trained with a story context or previous context
+        if configuration.story_prompt:
+            context = self.agent.new_context()
+            for sentence in story.sentences:
+                self.update_context(sentence, context)
+                
+        line: int = 0
+        for sentence in story.sentences:
+            # 1. create model input
+            line_number = [line / configuration.line_divider]
+            model_input = ModelInput(context, story.embedding, line_number)
+            line += 1
+            
+            # 2. train for each token
+            for tok in sentence.tokens:
+                target = self.agent.token_dictionary.add_and_get(tok.text)
+                self.agent.glp_network.learn(model_input, target, story.batch)
+                context.add_token(target)
+
+            # 3. context / narrative for each sentence
+            self.update_context(sentence, context)
+            
+        # log statistics for batch
+        story.batch.show(index)        
+
+    def build_curriculum(self, curriculum: Curriculum):
+        context = self.agent.new_context()
+
+        index: int = 1
+        for story in curriculum.stories:
+            self.build_story(index, story, context)
+            index += 1
 
 @dataclass
 class AgentBuilder:
@@ -73,22 +121,15 @@ class AgentBuilder:
     def train_agent(self, environment: WriterEnvironment, curriculum: Curriculum):
         print("Training agent from curriculum...")
         
-        warmup_epochs = environment.configuration.warmup_epochs
         random_epochs = environment.configuration.random_epochs
-        print(f"warmup epochs = {warmup_epochs}")
-        print(f"train epochs = {random_epochs}")
+        print(f"random epochs = {random_epochs}")
 
         agent: WriterAgent = self.load_or_create_agent(environment)
-
-        # determine maximum alpha transitions using multiplier and random epochs
-        if environment.configuration.alpha_transitions_epoch_multiplier > 0:
-            max_alpha_transitions = environment.configuration.alpha_transitions_epoch_multiplier * random_epochs
-            environment.configuration.max_alpha_transitions = max_alpha_transitions
-            agent.environment.configuration.max_alpha_transitions = max_alpha_transitions
-            print(f"max alpha transitions = {max_alpha_transitions}")
-
         agent.build_index_from_curriculum(curriculum)
         print(f"keywords = {len(agent.keyword_map)}")
+
+        training_builder: TrainingBatchBuilder = TrainingBatchBuilder(agent)
+        training_builder.build_curriculum(curriculum)
         
-        agent.train_curriculum(curriculum, warmup_epochs, random_epochs)        
+        agent.train_curriculum(curriculum, random_epochs)        
         agent.save(self.model_filename(environment))

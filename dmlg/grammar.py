@@ -7,7 +7,7 @@ import inflect
 import pyinflect
 import language_tool_python
 
-from .tokens import Token
+from .tokens import Token, END_PUNCTIATION_TOKENS
 from .config import Configuration
 
 def count_tokens(tokens: List[Token], text: str) -> int:
@@ -121,15 +121,21 @@ class GrammarEngine:
     # very basic grammatical check using only control tokens
     def basic_validate_grammar_tokens(self, tokens: List[Token]) -> bool:
         tokenlen = len(tokens)
+        
+        # check if sentence ends properly
         if tokenlen < 3:
+            print("G:LENGTH")
             return False
         if tokens[tokenlen - 1].text != "<EOL>":
+            print("G:EOL")
             return False
-        if tokens[tokenlen - 2].text not in ["<PERIOD>", "<EXCLAMATION>", "<QUESTION>"]:
+        if tokens[tokenlen - 2].text not in END_PUNCTIATION_TOKENS:
+            print(f"G:PUNCTUATION {tokens}")
             return False
 
         # must contain at least one verb (any VERB-* prefix)
         if not any(t.text.startswith("<VERB-") for t in tokens):
+            print("G:VERB")
             return False
 
         return True
