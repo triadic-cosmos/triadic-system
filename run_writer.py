@@ -8,8 +8,8 @@ start = time.perf_counter()
 
 print("Generating stories...")
 
-model = "mix"
-prefix = "10k"
+model = "odyssey"
+prefix = "200k"
 number_lines = 20
 number_stories = 10
 beam_search = False
@@ -81,6 +81,6 @@ ODYSSEY_PROMPT = [
 ]
 
 writer: TriadicWriter = TriadicWriter(model, prefix, number_lines)
-writer.write(number_stories, PLANET_PROMPT, keywords, beam_search)
+writer.write(number_stories, ODYSSEY_PROMPT, keywords, beam_search)
 
 print(f"Time: {time.perf_counter() - start:.1f} s")

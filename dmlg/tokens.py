@@ -184,14 +184,7 @@ class TargetToken:
     grammar: Token
     lemma: Token
 
-# Terminal target tokens
-TargetToken.TERMINALS = [
-    TargetToken(Token.PERIOD, Token.PERIOD),
-    TargetToken(Token.EXCLAMATION, Token.EXCLAMATION),
-    TargetToken(Token.QUESTION, Token.QUESTION),
-    TargetToken(Token.COMMA, Token.COMMA),
-    TargetToken(Token.EOL, Token.EOL),    
-]
+TargetToken.PERIOD = TargetToken(Token.PERIOD, Token.PERIOD)
 
 # ============================================================
 # TokenPage

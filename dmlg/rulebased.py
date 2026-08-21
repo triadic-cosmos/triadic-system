@@ -13,7 +13,7 @@ from .tokens import (
 # ============================================================
 
 BAD_START = { "them", "him", "her", "whom", "whose", "and", "or", "nor", "but", "yet", "so" }
-BAD_END = { "a", "an", "the", "as", "and", "or", "nor", "but", "so", "of", "to", "in", "on", "at", "by", "he", "her", "they" }
+BAD_END = { "a", "an", "the", "as", "and", "or", "nor", "but", "so", "of", "to", "in", "on", "at", "by", "he", "her", "they", "their" }
 
 NO_PUNCTUATION_TOKENS = {
     "<DET>",
@@ -159,7 +159,7 @@ class RuleBasedFilter:
             # TODO add all blacklisted grammar tokens
             incompatible.update(GRAMMAR_BLACKLIST[forelast.text])
             
-            if last.text in BAD_END or forelast.text in NO_PUNCTUATION_TOKENS:
+            if last.lower_text in BAD_END or forelast.text in NO_PUNCTUATION_TOKENS:
                 incompatible.update(ALL_PUNCTIATION_TOKENS)
             elif len(current_tokens) < min_tokens or \
                 not any(t.text.startswith("<VERB-") for t in current_tokens):

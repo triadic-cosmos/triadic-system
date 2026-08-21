@@ -53,6 +53,7 @@ from .writer_environment import WriterEnvironment
 
 from .agent_builder import (
     AgentBuilder,
+    TrainingBatchBuilder,
     DATA_FOLDER
 )
 

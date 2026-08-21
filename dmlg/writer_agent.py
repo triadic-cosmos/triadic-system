@@ -6,7 +6,7 @@ import random
 import pickle
 import math
 
-from .config import Configuration
+from .config import Configuration, TOP_BOOST
 from .writer_environment import WriterEnvironment
 from .writer_story import WriterStory, WriterSentence
 from .tokens import Token, TokenDictionary, TokenLogit
@@ -208,13 +208,23 @@ class WriterAgent:
         top_k = self.environment.configuration.top_k
         candidates = outputs[:top_k]
 
-        # softmax sampling over pair scores
+        # sampling using pair scores
         temperature = self.environment.configuration.temperature
         logits = [c.logit for c in candidates]
-        exp_logits = [math.exp(l / temperature) for l in logits]
-        total = sum(exp_logits)
-        probs = [e / total for e in exp_logits]
-
+        min_logit = min(logits)
+        size = len(logits)
+        boost_size = len(TOP_BOOST)
+        
+        for o in range(size):
+            logits[o] = logits[o] - min_logit + temperature
+            if o < boost_size:
+                logits[o] = logits[o] * TOP_BOOST[o]
+        total = sum(logits)
+        if total == 0:
+            probs = logits
+        else:
+            probs = [e / total for e in logits]
+            
         selected = self.rng.choices(candidates, weights=probs, k=1)[0]
 
         # return full TokenLogit (grammar + lemma + logit)

@@ -10,6 +10,7 @@ from dmlg import (
     CurriculumSentence,
     CurriculumStory,
     ContextWindow,
+    ModelInput,
     WriterAgent,
     WriterStory,
     WriterSentence
@@ -24,7 +25,6 @@ FIX_PROMPT = (
 "Avoid introducing a lot of new vocabulary. "
 "Avoid excessive usage of punctuation and commas. "
 "Use only narrative and descriptive story sentences in third person. "
-"Keep all sentences short and simple like in an essay of a teenager! "
 "End the story with a line containing: The End. "
 "This is the story: "
 )
@@ -57,10 +57,13 @@ class TriadicBooster:
                 sequence = self.agent.choose_best_embedding(None)
                 sentences = []
                 attempts = 0
+                line_nr = 0
                 
-                while len(sentences) < nr_lines:
+                while line_nr < nr_lines:
                     generate_ctx.clear_current_sentence()
-                    sentence: WriterSentence = self.agent.generate_sentence(sequence, generate_ctx, [])
+                    line = [line_nr / self.configuration.line_divider]
+                    model_input = ModelInput(generate_ctx, sequence, line)
+                    sentence: WriterSentence = self.agent.generate_sentence(model_input, [])
                     if sentence:
                         sentence.fixed = self.environment.grammar.fix_grammar(sentence.natural)
                         # avoid stalling by using maximum number of attempts
@@ -70,6 +73,7 @@ class TriadicBooster:
                         attempts = 0
                         self.agent.update_context(generate_ctx, sentence)
                         sentences.append(sentence)
+                        line_nr += 1
                         print(f"G-{len(sentences)}. {sentence.fixed}")
 
                 writer_story: WriterStory = WriterStory(sentences)

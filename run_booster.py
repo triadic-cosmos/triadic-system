@@ -8,14 +8,14 @@ from engine.triadic_booster import TriadicBooster
 from dmlg import (
     AgentBuilder,
     WriterAgent,
-    WriterEnvironment
+    WriterEnvironment,
+    TrainingBatchBuilder
 )
 
 # Parameters
-WARMUP_EPOCHS = 1
-RANDOM_EPOCHS = 2000
-MODEL_NAME = "planet"
-MODEL_PREFIX = "lifecycle"
+RANDOM_EPOCHS = 5000
+MODEL_NAME = "lifecycle"
+MODEL_PREFIX = "full"
 NR_STORIES = 10
 NR_LINES = 20
 MIN_LINES = 15
@@ -40,10 +40,16 @@ while True:
     preprocessed_filename = builder.preprocessed_filename(environment, "book")
     shutil.copy(source_curriculum_filename, curriculum_filename)
 
-    # Train new model
+    # Load Curriculum
     curriculum = builder.build_curriculum(environment, "book")
     agent.build_index_from_curriculum(curriculum)
-    agent.train_curriculum(curriculum, WARMUP_EPOCHS, RANDOM_EPOCHS)
+    
+    # Create batches
+    training_builder: TrainingBatchBuilder = TrainingBatchBuilder(agent)
+    training_builder.build_curriculum(curriculum)
+
+    # Train agent
+    agent.train_curriculum(curriculum, RANDOM_EPOCHS)
     target_model_filename = f"{builder.environment_path(environment)}/model/model-{iteration}.bin"
     agent.save(target_model_filename)
 

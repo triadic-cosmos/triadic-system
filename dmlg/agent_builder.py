@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .grammar import GrammarEngine
 from .semantic import SemanticEngine
-from .config import Configuration
+from .config import Configuration, ENABLE_PAGING
 from .context import ContextWindow
 from .writer_agent import WriterAgent, ModelInput
 from .writer_environment import WriterEnvironment
@@ -18,6 +18,7 @@ DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v7/"
 MODEL_FILENAME: str = "_model.bin"
 TOKENS_FILENAME: str = "_tokens.txt"
 OUTPUT_FILENAME: str = "_output.txt"
+OUTPUT_NO_PAGING_FILENAME = str = "_output_mlp.txt"
 
 @dataclass
 class TrainingBatchBuilder:
@@ -48,8 +49,9 @@ class TrainingBatchBuilder:
             # 2. train for each token
             for tok in sentence.tokens:
                 target = self.agent.token_dictionary.add_and_get(tok.text)
-                self.agent.glp_network.learn(model_input, target, story.batch)
-                context.add_token(target)
+                if not target.is_eol(): # do not learn EOL as transition
+                    self.agent.glp_network.learn(model_input, target, story.batch)
+                    context.add_token(target)
 
             # 3. context / narrative for each sentence
             self.update_context(sentence, context)
@@ -61,9 +63,13 @@ class TrainingBatchBuilder:
         context = self.agent.new_context()
 
         index: int = 1
+        total_samples: int = 0
         for story in curriculum.stories:
             self.build_story(index, story, context)
+            total_samples += len(story.batch.samples)
             index += 1
+            
+        print(f"Total {total_samples} unique samples in {len(curriculum.stories)} sequences")
 
 @dataclass
 class AgentBuilder:
@@ -88,8 +94,11 @@ class AgentBuilder:
         return self.environment_path(environment) + environment.prefix + MODEL_FILENAME
 
     def output_filename(self, environment: WriterEnvironment) -> str:
-        return self.environment_path(environment) + environment.prefix + OUTPUT_FILENAME
-
+        if ENABLE_PAGING:
+            return self.environment_path(environment) + environment.prefix + OUTPUT_FILENAME
+        else:
+            return self.environment_path(environment) + environment.prefix + OUTPUT_NO_PAGING_FILENAME
+            
     def load_or_create_agent(self, environment: WriterEnvironment) -> WriterAgent:
         name = environment.configuration.name
         if Path(self.model_filename(environment)).is_file():

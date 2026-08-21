@@ -121,11 +121,42 @@ class ContextWindow:
         self._narrative_memory_embedding = None
             
     def get_current_embedding(self) -> List[float]:
-        return self._current_grammar_sentence.get() + self._current_lemma_sentence.get()
+        if self._forelast_token.is_eol():
+            # end of line
+            token1 = self._forelast_token
+            token2 = self._forelast_token
+            comma = [0.0]
+        elif self._forelast_token.is_all_punctuation():
+            # punctuation
+            if len(self._current_tokens) >= 4:
+                token1 = self._current_tokens[-4]
+                token2 = self._current_tokens[-3]
+            else:
+                token1 = Token.EOL
+                token2 = Token.EOL
+                print(f"Unexpected punctuation : {self._current_tokens}")
+            comma = [1.0]
+        elif self._forelast_token.is_lemma():
+            # lemma
+            token1 = self._current_tokens[-3]
+            token2 = self._forelast_token
+            comma = [0.0]
+        else:
+            # grammar
+            token1 = self._forelast_token
+            token2 = self._last_token
+            comma = [0.0]
+                    
+        last_size = self.configuration.last_embedding_size            
+        embedding1 = self.lemma_embedding_dict.get_input_embedding(token1).embedding[:last_size]
+        embedding2 = self.lemma_embedding_dict.get_input_embedding(token2).embedding[:last_size]
+        return embedding1 + embedding2 + comma + \
+               self._current_grammar_sentence.get() + \
+               self._current_lemma_sentence.get()
     
     def copy_current(self) -> "ContextWindow":
         ctx: ContextWindow = ContextWindow(self.configuration, self.lemma_embedding_dict)
-        ctc._current_tokens = self._current_tokens.copy()
+        ctx._current_tokens = self._current_tokens.copy()
         ctx._current_grammar_sentence = self._current_grammar_sentence.copy()
         ctx._current_lamma_sentence = self._current_lemma_sentence.copy()
         ctx._last_token = self._last_token

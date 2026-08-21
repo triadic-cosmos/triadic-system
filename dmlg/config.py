@@ -3,6 +3,11 @@ from dataclasses import dataclass, field
 from typing import List
 
 NR_TOKENS_SLOTS = 6
+TOP_BOOST = [13, 8, 5, 3, 2]
+
+# Paging configuration
+ENABLE_PAGING = True
+MAX_PAGELESS_VOCAB = 1024
 
 @dataclass
 class Configuration:
@@ -11,23 +16,25 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 1024
-    other_hidden_size: int = 512
+    first_hidden_size: int = 1536
+    other_hidden_size: int = 768
     lemma_input_dimension: int = 32
-    lemma_output_dimension: int = 64
-    total_pages: int = 256
+    lemma_output_dimension: int = 128
+    total_pages: int = 512
+    max_page_input_size: int = 16
 
     # ------------------------------------------------------------
     # Context parameters
     # ------------------------------------------------------------
     generator_history_sentences = [5, 15]
     context_max_sentences = 80
-    content_max_lemmas = 40
+    content_max_lemmas = 30
 
     # ------------------------------------------------------------
     # Context embeddings
     # ------------------------------------------------------------
-    memory_embedding_size: int = 32     
+    memory_embedding_size: int = 32
+    last_embedding_size: int = 16
     sentence_large_embedding_size: int = 4   
     sentence_medium_embedding_size: int = 2
     narrative_state_size: int = 128
@@ -52,7 +59,7 @@ class Configuration:
     # Generation parameters
     # ------------------------------------------------------------
     min_words: int = 5
-    max_words: int = 30
+    max_words: int = 20
     max_tokens: int = 70
     story_lines: int = 20
     max_attempts: int = 10000
@@ -60,8 +67,8 @@ class Configuration:
 
     # Sampling
     top_k: int = 20
-    temperature: float = 0.8
-
+    temperature: float = 0.001
+    
     # Beam-search
     nr_of_beams: int = 3
     beam_alpha: float = 0.8
@@ -79,13 +86,14 @@ class Configuration:
         )
 
     def generator_current_context_size(self) -> int:
-        # grammar and lemma, current_position (1)
-        return 2 * (self.content_max_lemmas * self.sentence_medium_embedding_size + 1)
+        # current position (2x1) + comma (1)
+        return 2 * self.last_embedding_size + \
+            2 * self.content_max_lemmas * self.sentence_medium_embedding_size + 3
 
     def generator_input_size(self) -> int:
         # sequence embedding (8) + line number (1)
         return self.generator_history_context_size() + self.generator_current_context_size() + self.narrative_state_size + 9
 
     def generator_output_size(self) -> int:
-        # grammar + pages + lemma embedding
-        return self.total_pages + self.lemma_output_dimension
+        # lemma embedding
+        return self.lemma_output_dimension
