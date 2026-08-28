@@ -8,8 +8,8 @@ start = time.perf_counter()
 
 print("Generating stories...")
 
-model = "odyssey"
-prefix = "200k"
+model = "alice"
+prefix = "20k"
 number_lines = 20
 number_stories = 10
 beam_search = False

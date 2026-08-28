@@ -2,8 +2,8 @@ from engine.triadic_trainer import TriadicTrainer
 
 import time
 
-MODEL = "odyssey"
-VARIANTS = [200]
+MODEL = "alice"
+VARIANTS = [20]
 
 # Training a dataset model with epoch variants
 trainer: TriadicTrainer = TriadicTrainer()
