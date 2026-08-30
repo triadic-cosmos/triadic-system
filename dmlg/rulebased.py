@@ -148,6 +148,7 @@ class RuleBasedFilter:
             # 2. Punctuation rules
             if last.is_terminal():
                 incompatible.update(ALL_PUNCTIATION_TOKENS)
+                incompatible.update("<PART>")
                 
             # 3. Bad grammar at start
             if last.is_eol():

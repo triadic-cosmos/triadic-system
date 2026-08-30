@@ -36,6 +36,21 @@ GRAMMAR_TOKENS = [
     "<EOL>",
 ]
 
+HISTORY_TOKENS = {
+    "<VERB-PRESENT>",
+    "<VERB-PRESENT-3S>",
+    "<VERB-PRESENT-1S>",
+    "<VERB-PAST>",
+    "<VERB-ING>",
+    "<VERB-INGV>",
+    "<VERB-PERFECT>",    
+    "<NOUN>",
+    "<NOUN-PLURAL>",
+    "<PROPN>",
+    "<ADJ>",
+    "<ADV>"
+}
+
 TERMINAL_TOKENS = {
     "<PERIOD>",
     "<COMMA>",
@@ -325,7 +340,7 @@ class LearnedTokenEmbedding:
     
     def update(self, target: List[float], alpha: float):
         if len(target) != self.dimension:
-            raise Exception(f"Incompatible dimension! {dimension} != {len(target)}")
+            raise Exception(f"Incompatible dimension! {self.dimension} != {len(target)}")
         orig_alpha = 1.0 - alpha
         for i in range(0, self.dimension):
             self.embedding[i] = self.embedding[i] * orig_alpha + target[i] * alpha

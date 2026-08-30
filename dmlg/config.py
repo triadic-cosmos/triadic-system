@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 NR_TOKENS_SLOTS = 6
-TOP_BOOST = [13, 8, 5, 3, 2]
+TOP_BOOST = [4, 3, 3, 2, 2]
 
 # Paging configuration
 ENABLE_PAGING = True
@@ -17,27 +17,28 @@ class Configuration:
     # GLP model parameters
     # ------------------------------------------------------------
     first_hidden_size: int = 1024
-    other_hidden_size: int = 512
-    lemma_input_dimension: int = 32
-    lemma_output_dimension: int = 64
+    other_hidden_size: int = 1024
+    lemma_input_dimension: int = 48
+    lemma_output_dimension: int = 128
     total_pages: int = 512
     max_page_input_size: int = 16
 
     # ------------------------------------------------------------
     # Context parameters
     # ------------------------------------------------------------
-    generator_history_sentences = [5, 15]
-    context_max_sentences = 80
-    content_max_lemmas = 30
+    generator_history_sentences = [5, 0]
+    context_max_sentences = 5
+    position_divider = 30
+    history_alpha = 0.95
 
     # ------------------------------------------------------------
     # Context embeddings
     # ------------------------------------------------------------
-    memory_embedding_size: int = 32
+    narrative_state_size: int = 8
+    memory_embedding_size: int = 2
     last_embedding_size: int = 16
     sentence_large_embedding_size: int = 4   
     sentence_medium_embedding_size: int = 2
-    narrative_state_size: int = 128
 
     # ------------------------------------------------------------
     # Curriculum parameters
@@ -66,7 +67,7 @@ class Configuration:
     line_divider: float = 20
 
     # Sampling
-    top_k: int = 20
+    top_k: int = 8
     temperature: float = 0.001
     
     # Beam-search
@@ -87,12 +88,14 @@ class Configuration:
 
     def generator_current_context_size(self) -> int:
         # current position (2x1) + comma (1)
-        return 2 * self.last_embedding_size + \
-            2 * self.content_max_lemmas * self.sentence_medium_embedding_size + 3
+        return 2 * self.last_embedding_size + 3
 
     def generator_input_size(self) -> int:
         # sequence embedding (8) + line number (1)
-        return self.generator_history_context_size() + self.generator_current_context_size() + self.narrative_state_size + 9
+        return self.generator_current_context_size() + \
+               self.narrative_state_size + \
+               self.lemma_input_dimension + \
+               9
 
     def generator_output_size(self) -> int:
         # lemma embedding

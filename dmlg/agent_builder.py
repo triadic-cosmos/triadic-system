@@ -14,7 +14,7 @@ from .curriculum import Curriculum, CurriculumStory, CurriculumSentence
 from .tokens import TokenPage
 from .training import TrainingBatch, TrainingSample
 
-DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v7/"
+DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v8/"
 MODEL_FILENAME: str = "_model.bin"
 TOKENS_FILENAME: str = "_tokens.txt"
 OUTPUT_FILENAME: str = "_output.txt"

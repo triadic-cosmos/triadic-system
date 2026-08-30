@@ -80,7 +80,30 @@ ODYSSEY_PROMPT = [
 "Odysseus stepped forward, guided by fate’s unseen hand, for every wanderer must one day walk into the mist and claim his name."
 ]
 
+ALICE_PROMPT = [
+"Alice stood again in the long hall, her hand resting on the cold doorframe.",
+"The white rabbit had just slipped around a corner she did not recall existing.",
+"A faint ticking echoed above her, as if a watch swung somewhere out of sight.",
+"The floor tilted slightly, as though the room was thinking about moving.",
+"Her sister’s voice drifted from far away, too far for any real hallway.",
+"A small draft carried the smell of ink, cake, and a distant forest.",
+"Alice noticed her shadow stretching in two directions at once.",
+"Soft pattering footsteps suggested someone small was circling her.",
+"The queen’s voice murmured behind a curtain, though no curtain was visible.",
+"A tiny door near the floor glowed faintly, pulsing like a heartbeat.",
+"Alice touched her chin, wondering if she had grown again without noticing.",
+"A chair scraped somewhere, though the hall held no furniture at all.",
+"The march hare laughed once, sharply, then stopped as if corrected.",
+"A warm breeze lifted a page of a book lying open on the ground.",
+"The page showed Alice walking somewhere she had never been.",
+"A distant bell rang, folding itself neatly into silence.",
+"Alice stepped forward, unsure which direction she had chosen.",
+"The walls breathed once, quietly.",
+"Something moved behind her, waiting for her to speak.",
+"She opened her mouth, and the hall listened."
+]
+
 writer: TriadicWriter = TriadicWriter(model, prefix, number_lines)
-writer.write(number_stories, ODYSSEY_PROMPT, keywords, beam_search)
+writer.write(number_stories, ALICE_PROMPT, keywords, beam_search)
 
 print(f"Time: {time.perf_counter() - start:.1f} s")

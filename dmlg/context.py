@@ -2,10 +2,28 @@
 from dataclasses import dataclass, field
 from typing import List
 
-from .tokens import Token
+from .tokens import Token, HISTORY_TOKENS
 from .sentence_encoder import EncodedSentence
 from .narrative_memory import NarrativeMemory
 from .config import Configuration
+
+HISTORY_BLACKLIST = {
+    # Copulas 
+    "be",
+    # Auxiliaries
+    "have",
+    "do",
+    # Modals 
+    "will",
+    "can",
+    "shall",
+    "may",
+    "must",
+    "might",
+    "could",
+    "would",    
+    "should"
+}
 
 # ============================================================
 # Current Sentence
@@ -14,37 +32,47 @@ from .config import Configuration
 @dataclass
 class CurrentSentence:
     configuration: Configuration
-    
-    def __post_init__(self):
-        self.max_lemmas = self.configuration.content_max_lemmas
-        self.cut = self.configuration.sentence_medium_embedding_size
-        self.last_position = self.max_lemmas - 1
-    
+        
     def clear(self):
         self.position = 0
-        self.current_embedding = [
-            [0.0] * self.cut for _ in range(self.max_lemmas)
-        ]
         
     def add(self, embedding: List[float]):
-        if self.position < self.last_position:
-            vec = embedding[:self.cut]
-            self.current_embedding[self.position] = vec
-            self.position += 1
+        self.position += 1
             
     def get(self):
-        cur_pos = self.position / self.last_position
-        flat = []
-        for vec in self.current_embedding:
-            flat.extend(vec)
-        return [cur_pos] + flat
+        cur_pos = self.position / self.configuration.position_divider
+        return [cur_pos]
     
     def copy(self) -> "CurrentSentence":
         copy = CurrentSentence(self.configuration)
         copy.position = self.position
-        copy.current_embedding = [vec.copy() for vec in self.current_embedding]
         return copy
-      
+
+# ============================================================
+# Token History
+# ============================================================
+@dataclass
+class TokenHistory:
+    configuration: Configuration
+
+    def __post_init__(self):
+        self.history = [0] * self.configuration.lemma_input_dimension
+    
+    def add(self, embedding: List[float]):
+        alpha1 = self.configuration.history_alpha
+        alpha2 = 1.0 - alpha1
+        self.history = self.history[1:] + self.history[:1]
+        for i in range(len(embedding)):
+            self.history[i] = self.history[i] * alpha1 + embedding[i] * alpha2
+        
+    def get(self):
+        return self.history
+        
+    def copy(self) -> "TokenHistory":
+        copy = TokenHistory(self.configuration)
+        copy.history = self.history.copy()
+        return copy
+        
 # ============================================================
 # Context Window
 # ============================================================
@@ -57,6 +85,8 @@ class ContextWindow:
     def __post_init__(self):
         empty_sentence = EncodedSentence.make_empty_sentence(self.configuration)
         self._current_tokens = []
+        self._token_history = TokenHistory(self.configuration)
+        self._token_history_start = TokenHistory(self.configuration)
         self._current_grammar_sentence = CurrentSentence(self.configuration)        
         self._current_lemma_sentence = CurrentSentence(self.configuration)
         self.clear_current_sentence()
@@ -68,6 +98,7 @@ class ContextWindow:
         
     def clear_current_sentence(self):
         self._current_tokens = []
+        self._token_history = self._token_history_start.copy()
         self._current_grammar_sentence.clear()
         self._current_lemma_sentence.clear()
 
@@ -103,6 +134,9 @@ class ContextWindow:
             self._last_lemma = token
             emb = self.lemma_embedding_dict.get_input_embedding(token).embedding
             self._current_lemma_sentence.add(emb)
+            if self._forelast_token.text in HISTORY_TOKENS and \
+                token.text not in HISTORY_BLACKLIST:
+                    self._token_history.add(emb)
             
         else:
             emb = self.lemma_embedding_dict.get_input_embedding(token).embedding
@@ -114,6 +148,7 @@ class ContextWindow:
         self._sentences.insert(0, sentence)
         self._generator_history_embedding = None
         self._evaluator_history_embedding = None
+        self._token_history_start = self._token_history.copy()
         self.clear_current_sentence()
             
     def update_narrative_memory(self, tokens: List[Token]):
@@ -153,10 +188,12 @@ class ContextWindow:
         return embedding1 + embedding2 + comma + \
                self._current_grammar_sentence.get() + \
                self._current_lemma_sentence.get()
-    
+        
     def copy_current(self) -> "ContextWindow":
         ctx: ContextWindow = ContextWindow(self.configuration, self.lemma_embedding_dict)
         ctx._current_tokens = self._current_tokens.copy()
+        ctx._token_history = self._token_history.copy()
+        ctx._token_history_start = self._token_history_start
         ctx._current_grammar_sentence = self._current_grammar_sentence.copy()
         ctx._current_lamma_sentence = self._current_lemma_sentence.copy()
         ctx._last_token = self._last_token
@@ -181,6 +218,9 @@ class ContextWindow:
         if self._narrative_memory_embedding == None:
             self._narrative_memory_embedding = self._narrative_memory.get_state()
         return self._narrative_memory_embedding
+
+    def get_token_history_embedding(self) -> List[float]:
+        return self._token_history.get()
 
 # ============================================================
 # History embedding
@@ -219,16 +259,16 @@ class ModelInput:
 @dataclass(frozen=True)
 class InputEncoder:
     def encode(self, model_input: ModelInput) -> List[float]:
-        history_embedding = model_input.window.get_generator_history_embedding()
         current_embedding = model_input.window.get_current_embedding()
         narrative_embedding = model_input.window.get_narrative_memory_embedding()
+        token_history = model_input.window.get_token_history_embedding()
         sequence_embedding = model_input.sequence_embedding
         line_number = model_input.line_number
         
         return (
-            history_embedding
-            + current_embedding
+            current_embedding
             + narrative_embedding
+            + token_history
             + sequence_embedding
             + line_number
         )
