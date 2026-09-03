@@ -8,10 +8,10 @@ start = time.perf_counter()
 
 print("Generating stories...")
 
-model = "alice"
-prefix = "20k"
+model = "honeymoon"
+prefix = "stage4"
 number_lines = 20
-number_stories = 10
+number_stories = 20
 beam_search = False
 keywords = {}
 
@@ -103,7 +103,19 @@ ALICE_PROMPT = [
 "She opened her mouth, and the hall listened."
 ]
 
+# Quote from original book
+HONEYMOON_PROMPT = [
+"Vote for sound men and sound money!",
+"In five minutes the wires of the United States were alive with the terse, pregnant message, and under the ocean in the dark depths of the Atlantic ooze, vivid narratives of the coming of the miracle went flashing to a hundred newspaper offices in England and on the Continent.",
+"The New York correspondent of the London Daily Express added the following paragraph to his account of the strange occurrence.",
+"The secret of this amazing vessel, which has proved itself capable of traversing the Atlantic in a day, and of soaring beyond the limits of the atmosphere at will, is possessed by one man only, and that man is an English nobleman.",
+"The air is full of rumours of universal war.",
+"One vessel such as this could scatter terror over a continent in a few days, demoralise armies and fleets, reduce Society to chaos, and establish a one-man despotism on the ruins of all the Governments of the world.",
+"The man who could build one ship like this could build fifty, and, if his country asked him to do it, no doubt he would.",
+"Those who, as we are almost forced to believe, are even now contemplating a serious attempt to dethrone England from her supreme place among the nations of Europe, will do well to take this latest potential factor in the warfare of the immediate future into their most serious consideration."
+]
+
 writer: TriadicWriter = TriadicWriter(model, prefix, number_lines)
-writer.write(number_stories, ALICE_PROMPT, keywords, beam_search)
+writer.write(number_stories, HONEYMOON_PROMPT, keywords, beam_search)
 
 print(f"Time: {time.perf_counter() - start:.1f} s")

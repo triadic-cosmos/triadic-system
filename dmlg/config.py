@@ -7,7 +7,7 @@ TOP_BOOST = [4, 3, 3, 2, 2]
 
 # Paging configuration
 ENABLE_PAGING = True
-MAX_PAGELESS_VOCAB = 1024
+MAX_PAGELESS_VOCAB = 2048
 
 @dataclass
 class Configuration:
@@ -16,12 +16,12 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 1024
-    other_hidden_size: int = 1024
+    first_hidden_size: int = 1280
+    other_hidden_size: int = 1280
     lemma_input_dimension: int = 48
     lemma_output_dimension: int = 128
-    total_pages: int = 512
-    max_page_input_size: int = 16
+    total_pages: int = 1024
+    max_page_input_size: int = 8
 
     # ------------------------------------------------------------
     # Context parameters
@@ -34,8 +34,8 @@ class Configuration:
     # ------------------------------------------------------------
     # Context embeddings
     # ------------------------------------------------------------
-    narrative_state_size: int = 8
-    memory_embedding_size: int = 2
+    narrative_state_size: int = 32
+    memory_embedding_size: int = 8
     last_embedding_size: int = 16
     sentence_large_embedding_size: int = 4   
     sentence_medium_embedding_size: int = 2
@@ -54,6 +54,7 @@ class Configuration:
     learn_alpha: float = 0.001
     random_epochs: int = 1000
     epochs_step: int = 10
+    show_epochs_step: int = 1000
     story_prompt: bool = False
 
     # ------------------------------------------------------------

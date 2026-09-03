@@ -7,6 +7,8 @@ from .context import ContextWindow
 from .tokens import TargetToken
 from .curriculum import Curriculum, CurriculumStory
 
+VERBOSE = False
+
 # ============================================================
 # TrainingSample
 # ============================================================
@@ -32,4 +34,5 @@ class TrainingBatch:
         self.samples += batch.samples
     
     def show(self, index: int):
-        print(f"[{index}] samples = {len(self.samples)}")
+        if VERBOSE:
+            print(f"[{index}] samples = {len(self.samples)}")

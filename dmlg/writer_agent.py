@@ -68,7 +68,7 @@ class WriterAgent:
         for epoch in range(1, random_epochs + 1):
             story: CurriculumStory = curriculum.get_random_story(self.rng)
             super_batch.append(story.batch)
-            if epoch % self.configuration.epochs_step == 0:
+            if epoch % self.configuration.show_epochs_step == 0:
                 super_batch = self.learn_batch(epoch, super_batch)
         
         self.learn_batch(random_epochs + 1, super_batch)            
