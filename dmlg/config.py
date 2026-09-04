@@ -16,8 +16,8 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 1280
-    other_hidden_size: int = 1280
+    first_hidden_size: int = 768
+    other_hidden_size: int = 768
     lemma_input_dimension: int = 48
     lemma_output_dimension: int = 128
     total_pages: int = 1024
@@ -54,7 +54,7 @@ class Configuration:
     learn_alpha: float = 0.001
     random_epochs: int = 1000
     epochs_step: int = 10
-    show_epochs_step: int = 1000
+    show_epochs_step: int = 100
     story_prompt: bool = False
 
     # ------------------------------------------------------------

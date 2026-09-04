@@ -10,6 +10,8 @@ import language_tool_python
 from .tokens import Token, END_PUNCTIATION_TOKENS
 from .config import Configuration
 
+SPECIAL_VERBS = ("will", "can", "shall", "may", "would", "could", "should")
+    
 def count_tokens(tokens: List[Token], text: str) -> int:
     return sum(1 for token in tokens if token.text == text)
 
@@ -77,8 +79,8 @@ class GrammarEngine:
                 return "is"
             return "are"
         
-        # Special case: "will" or "can"
-        if verb == "will" or verb == "can":
+        # Special verbs without distinct third person 
+        if verb in SPECIAL_VERBS:
             return verb
 
         doc = self.nlp(verb)
@@ -346,8 +348,8 @@ class GrammarEngine:
                 continue
 
             # Simple tags
-            if tok in ("<DET>", "<NUM>", "<ADJ>", "<ADV>", "<SCONJ>", "<CCONJ>", "<X>",
-                       "<PROPN>", "<ADP>", "<PART>", "<PRON>", "<PRONA>", "<INTJ>"):
+            if tok in ("<DET>", "<NUM>", "<ADJ>", "<ADV>", "<SCONJ>", "<CCONJ>", 
+                       "<ADP>", "<PART>", "<PRON>", "<PRONA>", "<INTJ>", "<X>"):
                 t = tokens[i + 1]
                 if t == "i":
                     output.append("I")
@@ -366,6 +368,13 @@ class GrammarEngine:
             if tok == "<NOUN-PLURAL>":
                 lemma = tokens[i + 1]
                 output.append(self.get_plural(lemma))
+                i += 2
+                continue
+            
+            # Capitalize a property name
+            if tok == "<PROPN>":
+                lemma = tokens[i + 1]
+                output.append(lemma.title())
                 i += 2
                 continue
 

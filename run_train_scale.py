@@ -3,9 +3,9 @@ from engine.triadic_trainer import TriadicTrainer
 import time
 
 MODEL = "honeymoon"
-OLD_PREFIX = "small"
-NEW_PREFIX = "xl"
-NEW_HIDDEN_SIZE = 3200
+OLD_PREFIX = "stage4"
+NEW_PREFIX = "xl_stage4"
+NEW_HIDDEN_SIZE = 3072
 EPOCHS = 10000
 
 # Scale and continue training an existing model

@@ -3,7 +3,7 @@ from engine.triadic_trainer import TriadicTrainer
 import time
 
 MODEL = "honeymoon"
-VARIANTS = [10]
+VARIANTS = [100]
 
 # Training a dataset model with epoch variants
 trainer: TriadicTrainer = TriadicTrainer()

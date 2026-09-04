@@ -3,17 +3,13 @@ from engine.triadic_writer import TriadicWriter
 
 import time
 
-# Generation main using keywords, prompt and beam search
-start = time.perf_counter()
+MODEL = "time"
+PREFIXES = ["base"]
 
-print("Generating stories...")
-
-model = "honeymoon"
-prefix = "stage4"
-number_lines = 20
-number_stories = 20
-beam_search = False
-keywords = {}
+NUM_LINES = 20
+NUM_STORIES = 20
+BEAM_SEARCH = False
+KEYWORDS = {}
 
 FOREST_PROMPT = [
 "Cold night presses against silent forest. ",
@@ -115,7 +111,25 @@ HONEYMOON_PROMPT = [
 "Those who, as we are almost forced to believe, are even now contemplating a serious attempt to dethrone England from her supreme place among the nations of Europe, will do well to take this latest potential factor in the warfare of the immediate future into their most serious consideration."
 ]
 
-writer: TriadicWriter = TriadicWriter(model, prefix, number_lines)
-writer.write(number_stories, HONEYMOON_PROMPT, keywords, beam_search)
+# Quote from original book
+TIME_PROMPT = [
+"That is the germ of my great discovery.",
+"But you are wrong to say that we cannot move about in Time.",
+"For instance, if I am recalling an incident very vividly I go back to the instant of its occurrence."
+"I become absent-minded, as you say."
+"I jump back for a moment."
+"Of course we have no means of staying back for any length of Time, any more than a savage or an animal has of staying six feet above the ground."
+"But a civilised man is better off than the savage in this respect."
+"He can go up against gravitation in a balloon, and why should he not hope that ultimately he may be able to stop or accelerate his drift along the Time-Dimension, or even turn about and travel the other way?"
+]
+
+# Generation main using keywords, prompt and beam search
+start = time.perf_counter()
+
+print("Generating stories...")
+
+for prefix in PREFIXES:
+    writer: TriadicWriter = TriadicWriter(MODEL, prefix, NUM_LINES)
+    writer.write(NUM_STORIES, TIME_PROMPT, KEYWORDS, BEAM_SEARCH)
 
 print(f"Time: {time.perf_counter() - start:.1f} s")

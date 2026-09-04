@@ -14,6 +14,8 @@ from .context import ContextWindow, ModelInput
 from .glp_network import GlpNetwork, TrainingBatch
 from .curriculum import Curriculum, CurriculumStory, CurriculumSentence
 
+GRAMMAR_CHECK = False
+
 @dataclass
 class WriterAgent:
     environment: WriterEnvironment
@@ -54,7 +56,6 @@ class WriterAgent:
 
     def learn_batch(self, epoch: int, batch: TrainingBatch) -> TrainingBatch:
         if batch.has_samples():
-            print(epoch)
             self.glp_network.learn_batch(batch)
             self.training_count += len(batch.samples) 
             return TrainingBatch()
@@ -68,10 +69,14 @@ class WriterAgent:
         for epoch in range(1, random_epochs + 1):
             story: CurriculumStory = curriculum.get_random_story(self.rng)
             super_batch.append(story.batch)
-            if epoch % self.configuration.show_epochs_step == 0:
+            if epoch % self.configuration.epochs_step == 0:
                 super_batch = self.learn_batch(epoch, super_batch)
+            if epoch % self.configuration.show_epochs_step == 0:
+                print(epoch)
         
-        self.learn_batch(random_epochs + 1, super_batch)            
+        self.learn_batch(random_epochs + 1, super_batch)
+        if epoch % self.configuration.show_epochs_step != 0:
+            print(epoch)
         self.show()
         
     # ------------------------------------------------------------
@@ -404,7 +409,22 @@ class WriterAgent:
 
     def fix_story(self, story: WriterStory):
         for sentence in story.sentences:
-            sentence.fixed = self.environment.grammar.fix_grammar(sentence.natural) 
+            # Applies some basic fixing rules to solve common issues
+            fixed = sentence.natural            
+            fixed = fixed.replace(" n't", " not")
+            fixed = fixed.replace(" '", "'")
+            fixed = fixed.replace(" a a", " an a")
+            fixed = fixed.replace(" woulds", " would")            
+            fixed = fixed.replace("I going", "I'm going")
+            fixed = fixed.replace(" america", " America")
+            sentence.fixed = fixed
+            # Check with grammar checker if there are any other potential issues
+            # Grammar fixing can be canon breaking and replace words incorrectly
+            if GRAMMAR_CHECK:        
+                grammar_fixed = self.environment.grammar.fix_grammar(fixed)
+                if grammar_fixed != fixed:
+                    print(f"<{fixed}")                
+                    print(f">{grammar_fixed}")
     
     def update_context_tokens(self, ctx: ContextWindow, tokens: List[Token]):
         encoded = self.glp_network.sentence_encoder.encode_sentence(tokens)

@@ -109,11 +109,17 @@ class RuleBasedFilter:
 
         last = model_input.window.last_token()
         if last.is_eol():
-            incompatible.update(BAD_START)        
+            incompatible.update(BAD_START)
+        elif last.is_all_punctuation():
+            incompatible.update(["n't", "'s", "'"])
         elif last.is_lemma():
             incompatible.add(last.lower_text)
                         
             current_tokens = model_input.window.current_tokens
+
+            # part after verb
+            if model_input.window.forelast_token().text in CONJUGATION_TOKENS:
+                incompatible.update(["'s", "'"])
 
             # repeat with intermediate word (A B A)
             if len(current_tokens) >= 4:
@@ -166,6 +172,11 @@ class RuleBasedFilter:
                 not any(t.text.startswith("<VERB-") for t in current_tokens):
                 incompatible.update(END_PUNCTIATION_TOKENS)
                 
+            # Plural noun directly after a or an
+            if last.lower_text in ("a", "an"):
+                incompatible.update("<NOUN-PLURAL>")
+
+            # do not repeat conjugated verbs
             if forelast.text in CONJUGATION_TOKENS:
                 incompatible.update(CONJUGATION_TOKENS)
             elif forelast.text in NOUN_TOKENS:
