@@ -26,8 +26,6 @@ class Configuration:
     # ------------------------------------------------------------
     # Context parameters
     # ------------------------------------------------------------
-    generator_history_sentences = [5, 0]
-    context_max_sentences = 5
     position_divider = 30
     history_alpha = 0.95
 

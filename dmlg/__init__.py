@@ -32,13 +32,6 @@ from .context import (
     InputEncoder,
 )
 
-# --- Sentence Encoding ----------------------------------------------------
-
-from .sentence_encoder import (
-    SentenceEncoder,
-    EncodedSentence
-)
-
 # --- Writer System --------------------------------------------------------
 
 from .writer_agent import (

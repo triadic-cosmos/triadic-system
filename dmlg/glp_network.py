@@ -17,7 +17,6 @@ from .tokens import (
     LemmaEmbeddingDictionary,
     GRAMMAR_TOKENS
 )
-from .sentence_encoder import SentenceEncoder
 from .context import ModelInput, InputEncoder
 from .neural import NeuralNetwork
 from .training import TrainingSample, TrainingBatch
@@ -39,7 +38,6 @@ class GlpNetwork:
 
     grammar_tokens: List[Token] = field(init=False)
     lemma_embedding_dict: LemmaEmbeddingDictionary = field(init=False)
-    sentence_encoder: SentenceEncoder = field(init=False)
 
     page_list: List[TokenPage] = field(default_factory=list)
     pages: dict = field(default_factory=dict)
@@ -57,7 +55,6 @@ class GlpNetwork:
 
         self.lemma_embedding_dict = self.create_lemma_embedding_dictionary()        
         self.grammar_tokens = [self.token_dictionary.map[text] for text in GRAMMAR_TOKENS]
-        self.sentence_encoder = SentenceEncoder(self.lemma_embedding_dict, self.configuration)
 
     # ------------------------------------------------------------
     # Embedding Learning

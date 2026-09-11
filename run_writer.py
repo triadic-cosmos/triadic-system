@@ -3,8 +3,8 @@ from engine.triadic_writer import TriadicWriter
 
 import time
 
-MODEL = "time"
-PREFIXES = ["base"]
+MODEL = "mars"
+PREFIXES = ["10k"]
 
 NUM_LINES = 20
 NUM_STORIES = 20
@@ -130,6 +130,6 @@ print("Generating stories...")
 
 for prefix in PREFIXES:
     writer: TriadicWriter = TriadicWriter(MODEL, prefix, NUM_LINES)
-    writer.write(NUM_STORIES, TIME_PROMPT, KEYWORDS, BEAM_SEARCH)
+    writer.write(NUM_STORIES, PLANET_PROMPT, KEYWORDS, BEAM_SEARCH)
 
 print(f"Time: {time.perf_counter() - start:.1f} s")

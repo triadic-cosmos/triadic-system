@@ -427,8 +427,7 @@ class WriterAgent:
                     print(f">{grammar_fixed}")
     
     def update_context_tokens(self, ctx: ContextWindow, tokens: List[Token]):
-        encoded = self.glp_network.sentence_encoder.encode_sentence(tokens)
-        ctx.add_sentence(encoded)
+        ctx.start_sentence()
         ctx.update_narrative_memory(tokens)
             
     def update_context(self, ctx: ContextWindow, sentence: WriterSentence):

@@ -174,6 +174,7 @@ class Token:
 
 # Initialize static tokens
 Token.EOL = Token("<EOL>")
+Token.EOP = Token("<EOP>")
 Token.PERIOD = Token("<PERIOD>")
 Token.EXCLAMATION = Token("<EXCLAMATION>")
 Token.QUESTION = Token("<QUESTION>")

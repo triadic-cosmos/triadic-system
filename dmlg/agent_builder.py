@@ -9,12 +9,11 @@ from .config import Configuration, ENABLE_PAGING
 from .context import ContextWindow
 from .writer_agent import WriterAgent, ModelInput
 from .writer_environment import WriterEnvironment
-from .sentence_encoder import SentenceEncoder
 from .curriculum import Curriculum, CurriculumStory, CurriculumSentence
 from .tokens import TokenPage
 from .training import TrainingBatch, TrainingSample
 
-DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v8/"
+DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v9/"
 MODEL_FILENAME: str = "_model.bin"
 TOKENS_FILENAME: str = "_tokens.txt"
 OUTPUT_FILENAME: str = "_output.txt"
@@ -25,8 +24,7 @@ class TrainingBatchBuilder:
     agent: WriterAgent
 
     def update_context(self, sentence: CurriculumSentence, context: ContextWindow):
-        encoded = sentence.get_encoded(self.agent.glp_network.sentence_encoder)
-        context.add_sentence(encoded)
+        context.start_sentence()
         context.update_narrative_memory(sentence.tokens)
 
     def build_story(self, index: int, story: CurriculumStory, context: ContextWindow):

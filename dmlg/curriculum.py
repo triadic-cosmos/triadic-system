@@ -10,20 +10,11 @@ from .tokens import Token, TokenDictionary
 from .grammar import GrammarEngine
 from .config import Configuration
 from .writer_environment import WriterEnvironment
-from .sentence_encoder import SentenceEncoder, EncodedSentence
 
 @dataclass
 class CurriculumSentence:
     tokens: List[Token]
     natural: str
-
-    def __post_init__(self):
-        self.encoded = None
-
-    def get_encoded(self, encoder: SentenceEncoder) -> EncodedSentence:
-        if not self.encoded:
-            self.encoded = encoder.encode_sentence(self.tokens)
-        return self.encoded
 
     def get_canonical(self) -> str:
         return " ".join([token.text for token in self.tokens])

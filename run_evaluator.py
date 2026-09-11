@@ -4,7 +4,7 @@ from engine.triadic_evaluator import TriadicEvaluator
 
 import time
 
-DATA_FOLDER = "../triadic-data/toy-system/toy-system-v8/honeymoon/"
+DATA_FOLDER = "../triadic-data/toy-system/toy-system-v9/mars/"
 EVALUATION_FOLDER = DATA_FOLDER + "output"
 OUTPUT_FILENAME = DATA_FOLDER + "eval.txt"
 MIN_LINES = 20
