@@ -42,8 +42,7 @@ class Configuration:
     # Curriculum parameters
     # ------------------------------------------------------------
     no_roundtrip: bool = True
-    max_stories: int = 3000
-    min_story_lines: int = 3
+    max_sentences: int = 100000
     min_sentence_length: int = 10
 
     # ------------------------------------------------------------
@@ -53,7 +52,6 @@ class Configuration:
     random_epochs: int = 1000
     epochs_step: int = 10
     show_epochs_step: int = 100
-    story_prompt: bool = False
 
     # ------------------------------------------------------------
     # Generation parameters

@@ -54,8 +54,7 @@ from .agent_builder import (
 
 from .curriculum import (
     Curriculum,
-    CurriculumStory,
-    CurriculumSentence,
+    CurriculumSentence
 )
 
 # --- Training -------------------------------------------------------------

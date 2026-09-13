@@ -9,7 +9,7 @@ from .config import Configuration, ENABLE_PAGING
 from .context import ContextWindow
 from .writer_agent import WriterAgent, ModelInput
 from .writer_environment import WriterEnvironment
-from .curriculum import Curriculum, CurriculumStory, CurriculumSentence
+from .curriculum import Curriculum, CurriculumSentence
 from .tokens import TokenPage
 from .training import TrainingBatch, TrainingSample
 
@@ -27,44 +27,37 @@ class TrainingBatchBuilder:
         context.start_sentence()
         context.update_narrative_memory(sentence.tokens)
 
-    def build_story(self, index: int, story: CurriculumStory, context: ContextWindow):
+    def build_sentence(self, index: int, sentence: CurriculumSentence, context: ContextWindow):
         configuration = self.agent.configuration
-        story.batch: TrainingBatch = TrainingBatch()
-        
-        # check if story is trained with a story context or previous context
-        if configuration.story_prompt:
-            context = self.agent.new_context()
-            for sentence in story.sentences:
-                self.update_context(sentence, context)
-                
-        for sentence in story.sentences:
-            # 1. create model input
-            model_input = ModelInput(context)
+        sentence.batch: TrainingBatch = TrainingBatch()
+                        
+        # 1. create model input
+        model_input = ModelInput(context)
             
-            # 2. train for each token
-            for tok in sentence.tokens:
-                target = self.agent.token_dictionary.add_and_get(tok.text)
-                if not target.is_eol(): # do not learn EOL as transition
-                    self.agent.glp_network.learn(model_input, target, story.batch)
-                    context.add_token(target)
+        # 2. train for each token
+        for tok in sentence.tokens:
+            target = self.agent.token_dictionary.add_and_get(tok.text)
+            if not target.is_eol(): # do not learn EOL as transition
+                self.agent.glp_network.learn(model_input, target, sentence.batch)
+                context.add_token(target)
 
-            # 3. context / narrative for each sentence
-            self.update_context(sentence, context)
+        # 3. context / narrative for each sentence
+        self.update_context(sentence, context)
             
         # log statistics for batch
-        story.batch.show(index)        
+        sentence.batch.show(index)        
 
     def build_curriculum(self, curriculum: Curriculum):
         context = self.agent.new_context()
 
         index: int = 1
         total_samples: int = 0
-        for story in curriculum.stories:
-            self.build_story(index, story, context)
-            total_samples += len(story.batch.samples)
+        for sentence in curriculum.sentences:
+            self.build_sentence(index, sentence, context)
+            total_samples += len(sentence.batch.samples)
             index += 1
             
-        print(f"Total {total_samples} unique samples in {len(curriculum.stories)} sequences")
+        print(f"Total {total_samples} unique samples in {len(curriculum.sentences)} sentences")
 
 @dataclass
 class AgentBuilder:

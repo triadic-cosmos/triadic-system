@@ -5,7 +5,7 @@ from typing import List
 from .config import Configuration
 from .context import ContextWindow
 from .tokens import TargetToken
-from .curriculum import Curriculum, CurriculumStory
+from .curriculum import Curriculum, CurriculumSentence
 
 VERBOSE = False
 

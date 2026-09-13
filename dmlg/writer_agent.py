@@ -12,7 +12,7 @@ from .writer_story import WriterStory, WriterSentence
 from .tokens import Token, TokenDictionary, TokenLogit
 from .context import ContextWindow, ModelInput
 from .glp_network import GlpNetwork, TrainingBatch
-from .curriculum import Curriculum, CurriculumStory, CurriculumSentence
+from .curriculum import Curriculum, CurriculumSentence
 
 GRAMMAR_CHECK = False
 
@@ -61,10 +61,10 @@ class WriterAgent:
     def train_curriculum(self, curriculum: Curriculum, random_epochs: int):
         super_batch: TrainingBatch = TrainingBatch()
 
-        # Train sequences using random order
+        # Train sentences using random order
         for epoch in range(1, random_epochs + 1):
-            story: CurriculumStory = curriculum.get_random_story(self.rng)
-            super_batch.append(story.batch)
+            sentence: CurriculumSentence = curriculum.get_random_sentence(self.rng)
+            super_batch.append(sentence.batch)
             if epoch % self.configuration.epochs_step == 0:
                 super_batch = self.learn_batch(epoch, super_batch)
             if epoch % self.configuration.show_epochs_step == 0:
