@@ -22,12 +22,6 @@ class CurriculumSentence:
 @dataclass
 class CurriculumStory:
     sentences: List[CurriculumSentence]
-    embedding: List[float] = field(init=False)
-    keywords: set = field(init=False)
-
-    def __post_init__(self):
-        self.embedding = stable_story_embedding(self)
-        self.keywords = extract_keywords(self)
 
 @dataclass(frozen=True)
 class Curriculum:
@@ -144,49 +138,3 @@ def preprocess_line(line: str) -> str:
         .replace("Dr.", "Dr") \
         .replace("Mr.", "Mr")
     return line
-
-def stable_story_embedding(story: CurriculumStory, dim: int = 8) -> List[float]:
-    """
-    Deterministic, stable 8-float embedding for a CurriculumStory.
-    - Order-insensitive (token bag-of-words style)
-    - Robust to small changes
-    - Perfect for persistent sequence indexing
-    """
-
-    # 1. Collect all token texts
-    tokens = []
-    for sentence in story.sentences:
-        for token in sentence.tokens:
-            tokens.append(token.text)
-
-    # 2. Sort tokens to remove order sensitivity
-    tokens.sort()
-
-    # 3. Join into canonical string
-    canonical = " ".join(tokens)
-
-    # 4. Hash deterministically
-    h = hashlib.sha256(canonical.encode("utf-8")).digest()
-
-    # 5. Convert hash bytes into floats
-    floats = []
-    for i in range(dim):
-        chunk = h[i*4:(i+1)*4]
-        val = struct.unpack(">I", chunk)[0]
-        floats.append(val / 2**32)
-
-    return floats
-
-def extract_keywords(story: CurriculumStory) -> set:
-    keywords = set()
-    select = False
-    for sentence in story.sentences:
-        for token in sentence.tokens:
-            if token.text in ["<NOUN>", "<VERB>"]:
-                select = True
-            elif token.is_lemma():
-                if select:
-                    if token.text not in ["be"]:
-                        keywords.add(token.text)
-                    select = False
-    return keywords

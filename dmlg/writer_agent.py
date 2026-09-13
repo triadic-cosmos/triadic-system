@@ -21,8 +21,6 @@ class WriterAgent:
     environment: WriterEnvironment
     id: str
     
-    keyword_map: Dict[str, List[List[float]]] = field(init=False)
-    keyword_count: Dict[str, int] = field(init=False)
     rng: random.Random = field(init=False)
     configuration: Configuration = field(init=False)
     glp_network: GlpNetwork = field(init=False)
@@ -39,8 +37,6 @@ class WriterAgent:
 
         self.max_tokens = self.environment.configuration.max_tokens
         self.token_dictionary = TokenDictionary()
-        self.keyword_map = dict()
-        self.keyword_count = dict()
 
         self.glp_network = GlpNetwork(self.configuration, self.token_dictionary)
 
@@ -80,79 +76,6 @@ class WriterAgent:
         self.show()
         
     # ------------------------------------------------------------
-    # Curriculum story indexing
-    # ------------------------------------------------------------
-
-    def filter_keywords(self, keywords: set[str]) -> set[str]:
-        filtered = set()
-        for k in keywords:
-            if k in self.keyword_map:
-                filtered.add(k)
-        return filtered
-
-    def build_index_from_curriculum(self, curriculum: Curriculum):
-        km = defaultdict(set) 
-        kc = defaultdict(int)
-
-        for story in curriculum.stories:
-            emb = tuple(story.embedding)  
-            kws = story.keywords
-
-            for kw in kws:
-                km[kw].add(emb)            
-                kc[kw] += 1
-
-        self.keyword_map = {k: list(v) for k, v in km.items()}
-        self.keyword_count = dict(kc)
-
-    def score_embeddings(self, keywords: Set[str]) -> Dict[tuple, float]:
-        """
-        Returns: embedding(tuple) -> score
-        Score = sum( 1 / keyword_count[keyword] ) for all keywords the embedding belongs to.
-        """
-        scores = defaultdict(float)
-
-        for kw in keywords:
-            if kw not in self.keyword_map:
-                continue
-            weight = 1.0 / self.keyword_count[kw]
-            
-            for emb in self.keyword_map[kw]:
-                emb_key = tuple(emb)
-                scores[emb_key] += weight
-
-        return scores
-
-    def choose_best_embedding(self, keywords: Set[str]) -> List[float]:
-        # ------------------------------------------------------------
-        # 1. No keywords → random keyword → random embedding
-        # ------------------------------------------------------------
-        if not keywords:
-            if not self.keyword_map:
-                return None
-
-            # random keyword
-            kw = self.rng.choice(list(self.keyword_map.keys()))
-
-            # random embedding for that keyword
-            return list(self.rng.choice(self.keyword_map[kw]))
-
-        # ------------------------------------------------------------
-        # 2. Normal scoring using keywords
-        # ------------------------------------------------------------
-        scores = self.score_embeddings(keywords)
-        if not scores:
-            return None
-
-        best_score = max(scores.values())
-
-        # all embeddings with highest score
-        candidates = [list(emb) for emb, sc in scores.items() if sc == best_score]
-
-        # random choice from top scores
-        return self.rng.choice(candidates)
-
-    # ------------------------------------------------------------
     # Logging
     # ------------------------------------------------------------
 
@@ -176,8 +99,6 @@ class WriterAgent:
             "token_dictionary": self.token_dictionary,
             "glp_network": self.glp_network,
             "training_count": self.training_count,
-            "keyword_map": self.keyword_map,
-            "keyword_count": self.keyword_count,
         }
         with open(path, "wb") as f:
             pickle.dump(state, f)
@@ -192,8 +113,6 @@ class WriterAgent:
         agent.token_dictionary = state["token_dictionary"]
         agent.glp_network = state["glp_network"]
         agent.training_count = state["training_count"]
-        agent.keyword_map = state["keyword_map"]
-        agent.keyword_count = state["keyword_count"]
         
         print(f"Loaded agent {agent.id}.")
         agent.show(True)
@@ -234,17 +153,6 @@ class WriterAgent:
 
         # return full TokenLogit (grammar + lemma + logit)
         return selected
-
-    def generate_keywords(self, prompt: str) -> set:
-        all_keywords = set()
-        for key in self.keyword_map.keys():
-            all_keywords.add(key)
-        keywords = set()
-        tokens = self.environment.grammar.convert_to_canonical_tokens(prompt)
-        for token in tokens:
-            if token.text in all_keywords:
-                keywords.add(token.text)
-        return keywords
 
     def generate_sentence(self, model_input: ModelInput, sentences: List[str]) -> WriterSentence:
         generated: List[Token] = []
@@ -299,7 +207,7 @@ class WriterAgent:
                 self.eol = self.tokens[-1].is_eol() if self.tokens else False
 
         # --- config parameters ---
-        temperature = self.environment.configuration.temperature
+        temperature = self.environment.configuration.beam_temperature
         alpha = self.environment.configuration.beam_alpha
         jitter_amp = self.environment.configuration.beam_jitter
         max_tokens = self.environment.configuration.max_tokens
@@ -324,7 +232,7 @@ class WriterAgent:
 
                 # GLP propose(): returns grammar+lemma pairs sorted by score
                 outputs: List[TokenLogit] = self.glp_network.propose(
-                    ModelInput(beam.ctx, model_input.sequence_embedding, model_input.line_number)
+                    ModelInput(beam.ctx)
                 )
 
                 if not outputs:
@@ -445,10 +353,7 @@ class WriterAgent:
         line_nr: int = 0
         lines: int = self.environment.configuration.story_lines
 
-        # 1. Choose sequence embedding
-        sequence_embedding = self.choose_best_embedding(keywords)
-
-        # 2. Prompt injection
+        # Prompt injection
         if prompt is not None and len(prompt) > 0:
             for prompt_line in prompt:
                 raw_tokens = self.environment.grammar.convert_to_canonical_tokens(prompt_line)
@@ -471,8 +376,7 @@ class WriterAgent:
         for _ in range(self.environment.configuration.max_attempts):
             ctx.clear_current_sentence()
 
-            line = [line_nr / self.configuration.line_divider]
-            model_input = ModelInput(ctx, sequence_embedding, line)
+            model_input = ModelInput(ctx)
 
             # --- BEAM SEARCH MODE ---
             if beam_search and beam_attempts > 0 and keywords is not None:

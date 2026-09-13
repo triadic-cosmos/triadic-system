@@ -63,7 +63,6 @@ class Configuration:
     max_tokens: int = 70
     story_lines: int = 20
     max_attempts: int = 10000
-    line_divider: float = 20
 
     # Sampling
     top_k: int = 8
@@ -74,7 +73,7 @@ class Configuration:
     beam_alpha: float = 0.8
     beam_jitter: float = 0.5
     beam_attempts: int = 3
-
+    beam_temperature: float = 0.8
     # ------------------------------------------------------------
     # Derived sizes
     # ------------------------------------------------------------
@@ -90,11 +89,9 @@ class Configuration:
         return 2 * self.last_embedding_size + 3
 
     def generator_input_size(self) -> int:
-        # sequence embedding (8) + line number (1)
         return self.generator_current_context_size() + \
                self.narrative_state_size + \
-               self.lemma_input_dimension + \
-               9
+               self.lemma_input_dimension 
 
     def generator_output_size(self) -> int:
         # lemma embedding

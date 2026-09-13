@@ -37,12 +37,9 @@ class TrainingBatchBuilder:
             for sentence in story.sentences:
                 self.update_context(sentence, context)
                 
-        line: int = 0
         for sentence in story.sentences:
             # 1. create model input
-            line_number = [line / configuration.line_divider]
-            model_input = ModelInput(context, story.embedding, line_number)
-            line += 1
+            model_input = ModelInput(context)
             
             # 2. train for each token
             for tok in sentence.tokens:
@@ -132,8 +129,6 @@ class AgentBuilder:
         print(f"random epochs = {random_epochs}")
 
         agent: WriterAgent = self.load_or_create_agent(environment)
-        agent.build_index_from_curriculum(curriculum)
-        print(f"keywords = {len(agent.keyword_map)}")
 
         training_builder: TrainingBatchBuilder = TrainingBatchBuilder(agent)
         training_builder.build_curriculum(curriculum)
