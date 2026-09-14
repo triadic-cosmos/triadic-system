@@ -29,14 +29,12 @@ class Configuration:
     position_divider = 30
     history_alpha = 0.95
 
-    # ------------------------------------------------------------
-    # Context embeddings
-    # ------------------------------------------------------------
+    narrative_sentences: int = 10
     narrative_state_size: int = 32
-    memory_embedding_size: int = 8
+    narrative_hidden_size: int = 64
+    narrative_token_size: int = 8
+    
     last_embedding_size: int = 16
-    sentence_large_embedding_size: int = 4   
-    sentence_medium_embedding_size: int = 2
 
     # ------------------------------------------------------------
     # Curriculum parameters
@@ -72,6 +70,7 @@ class Configuration:
     beam_jitter: float = 0.5
     beam_attempts: int = 3
     beam_temperature: float = 0.8
+    
     # ------------------------------------------------------------
     # Derived sizes
     # ------------------------------------------------------------
@@ -88,8 +87,8 @@ class Configuration:
 
     def generator_input_size(self) -> int:
         return self.generator_current_context_size() + \
-               self.narrative_state_size + \
-               self.lemma_input_dimension 
+               self.narrative_state_size * self.narrative_sentences + \
+               self.lemma_input_dimension
 
     def generator_output_size(self) -> int:
         # lemma embedding

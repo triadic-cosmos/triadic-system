@@ -4,10 +4,10 @@ from engine.triadic_writer import TriadicWriter
 import time
 
 MODEL = "mars"
-PREFIXES = ["100k"]
+PREFIXES = ["50k"]
 
-NUM_LINES = 20
-NUM_STORIES = 10
+NUM_LINES = 111
+NUM_STORIES = 1
 BEAM_SEARCH = False
 KEYWORDS = {}
 
@@ -123,6 +123,15 @@ TIME_PROMPT = [
 "He can go up against gravitation in a balloon, and why should he not hope that ultimately he may be able to stop or accelerate his drift along the Time-Dimension, or even turn about and travel the other way?"
 ]
 
+# Quote from original book
+MARS_PROMPT = [
+"The day following the coming of Vas Kor to the palace of the Prince of Helium great excitement reigned throughout the twin cities, reaching its climax in the palace of Carthoris."
+"Word had come of the abduction of Thuvia of Ptarth from her father’s court, and with it the veiled hint that the Prince of Helium might be suspected of considerable knowledge of the act and the whereabouts of the princess."
+"In the council chamber of John Carter, Warlord of Mars, was Tardos Mors, Jeddak of Helium; Mors Kajak, his son, Jed of Lesser Helium; Carthoris, and a score of the great nobles of the empire."
+"There must be no war between Ptarth and Helium, my son, said John Carter."
+"That you are innocent of the charge that has been placed against you by insinuation, we well know; but Thuvan Dihn must know it well, too."
+]
+
 # Generation main using keywords, prompt and beam search
 start = time.perf_counter()
 
@@ -130,6 +139,6 @@ print("Generating stories...")
 
 for prefix in PREFIXES:
     writer: TriadicWriter = TriadicWriter(MODEL, prefix, NUM_LINES)
-    writer.write(NUM_STORIES, PLANET_PROMPT, KEYWORDS, BEAM_SEARCH)
+    writer.write(NUM_STORIES, MARS_PROMPT, KEYWORDS, BEAM_SEARCH)
 
 print(f"Time: {time.perf_counter() - start:.1f} s")

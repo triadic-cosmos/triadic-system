@@ -1,184 +1,112 @@
 # narrative_memory.py
-import math
 import numpy as np
-from typing import List, Dict
+from typing import List
 
-from .tokens import Token
-
-ACTORS = "actors"
-ACTIONS = "actions"
-MOMENTS = "moments"
-ATMOSPHERE = "atmosphere"
+from .tokens import Token, HISTORY_TOKENS
 
 class NarrativeMemory:
     """
-    Narrative memory using learned embeddings:
-    - tracks actors / actions / moments / atmosphere
-    - frequency + recency
-    - GRU-like recurrent update
+    Narrative memory stores a fixed number of sentence projections.
+    New sentences always go into position 0.
+    Older sentences shift right: [0] -> [1] -> [2] -> ...
     """
-
-    CATEGORY_SIZES = {
-        ACTORS: 60,
-        ACTIONS: 30,
-        MOMENTS: 20,
-        ATMOSPHERE: 10,
-    }
-
-    ALPHA = 1.0
-    BETA = 1.0
-    GAMMA = 0.15
 
     def __init__(self, lemma_embedding_dict, configuration):
         self.lemma_embedding_dict = lemma_embedding_dict
         self.configuration = configuration
 
-        # persistent narrative state
-        self.state = np.zeros(self.configuration.narrative_state_size, dtype=float)
+        # Dimensions
+        self.S = configuration.narrative_token_size      # token embedding size
+        self.H = configuration.narrative_hidden_size     # recurrent hidden size
+        self.L = configuration.narrative_state_size      # projection size per sentence
+        self.M = configuration.narrative_sentences       # number of stored sentences
 
-        # category memories: token_text -> {embedding, count, last_seen}
-        self.mem = {
-            ACTORS: {},
-            ACTIONS: {},
-            MOMENTS: {},
-            ATMOSPHERE: {},
-        }
+        # Full narrative memory vector
+        self.narrative_size = self.L * self.M
+        self.state = np.zeros(self.narrative_size, dtype=float)
 
-        # GRU-like parameters
-        state = self.configuration.narrative_state_size
-        cat = self.configuration.memory_embedding_size * 4  # 4 categories
+        # Deterministic recurrent projector parameters
+        self.W_h = np.eye(self.H) * 0.8
+        self.W_e = np.ones((self.H, self.S)) * 0.01
+        self.b   = np.zeros(self.H)
 
-        self.W_f = np.random.randn(state, state + cat) * 0.01
-        self.W_u = np.random.randn(state, state + cat) * 0.01
-        self.W_s = np.random.randn(state, state + cat) * 0.01
+        self.V = np.eye(self.L, self.H)[:self.L]
+        self.c = np.zeros(self.L)
 
-        self.b_f = np.zeros(state)
-        self.b_u = np.zeros(state)
-        self.b_s = np.zeros(state)
+    def get_state(self) -> List[float]:
+        """Return the full narrative memory as a Python list."""
+        return self.state.tolist()
 
     # ------------------------------------------------------------
     # UPDATE MEMORY FROM A SENTENCE
     # ------------------------------------------------------------
     def update_from_sentence(self, tokens: List[Token]):
-        # increment recency
-        for cat in self.mem:
-            for entry in self.mem[cat].values():
-                entry["last_seen"] += 1
+        """
+        Extract semantic lemma tokens from the sentence.
+        Project them using the recurrent projector.
+        Insert the projection at position 0 and shift older entries.
+        """
 
-        current_category = None
-        emb_size = self.configuration.memory_embedding_size
+        sentence_vector: List[float] = []
+        valid = False
 
         for tok in tokens:
             t = tok.text
 
-            # grammar tokens determine category
-            if t in ["<NOUN>", "<NOUN-PLURAL>", "<PROPN>", "<PRON>", "<PRONA>"]:
-                current_category = ACTORS
+            # Grammar tokens mark that the next lemma is semantically relevant
+            if t in HISTORY_TOKENS:
+                valid = True
                 continue
 
-            if t in [
-                "<VERB-PRESENT>",
-                "<VERB-PRESENT-1S>",
-                "<VERB-PRESENT-3S>",
-                "<VERB-PAST>",
-                "<VERB-ING>",
-                "<VERB-INGV>",
-                "<VERB-PERFECT>",
-            ]:
-                current_category = ACTIONS
-                continue
-
-            if t == "<ADV>":
-                current_category = MOMENTS
-                continue
-
-            if t in ["<ADJ>"]:
-                current_category = ATMOSPHERE
-                continue
-
-            # skip non-lemma tokens
+            # Skip non-lemma tokens
             if not tok.is_lemma():
                 continue
 
-            # lemma token → add to memory
-            if current_category is not None:
-                key = tok.text
-
+            # If grammar token was seen, take this lemma
+            if valid:
+                valid = False
                 full_emb = self.lemma_embedding_dict.get_input_embedding(tok).embedding
-                emb = np.array(full_emb[:emb_size], dtype=float)
+                sentence_vector.extend(full_emb[:self.S])
 
-                if key not in self.mem[current_category]:
-                    self.mem[current_category][key] = {
-                        "embedding": emb,
-                        "count": 1,
-                        "last_seen": 0,
-                    }
-                else:
-                    self.mem[current_category][key]["count"] += 1
-                    self.mem[current_category][key]["last_seen"] = 0
+        # No semantic content → nothing to update
+        if len(sentence_vector) == 0:
+            return
 
-                current_category = None
+        # Convert to numpy
+        embedding = np.array(sentence_vector, dtype=float)
 
-        # forget old tokens
-        for cat, limit in self.CATEGORY_SIZES.items():
-            to_delete = []
-            for key, entry in self.mem[cat].items():
-                if entry["last_seen"] > limit:
-                    to_delete.append(key)
-            for key in to_delete:
-                del self.mem[cat][key]
+        # Recurrent projection
+        P = self.forward(embedding)
 
-        # compute category vectors
-        cat_vecs = []
-        for cat in [ACTORS, ACTIONS, MOMENTS, ATMOSPHERE]:
-            vec = self._compute_category_vector(self.mem[cat])
-            norm = np.linalg.norm(vec)
-            if norm > 0:
-                vec = vec / norm
-            cat_vecs.append(vec)
+        # ------------------------------------------------------------
+        # SHIFT MEMORY: newest sentence goes to slot 0
+        # ------------------------------------------------------------
+        # Shift all existing blocks one position to the right
+        if self.M > 1:
+            self.state[self.L:] = self.state[:-self.L]
 
-        combined = np.concatenate(cat_vecs)
-        self._update_state(combined)
+        # Insert new projection at position 0
+        self.state[:self.L] = P
 
     # ------------------------------------------------------------
-    # CATEGORY VECTOR
+    # RECURRENT PROJECTOR
     # ------------------------------------------------------------
-    def _compute_category_vector(self, entries: Dict[str, dict]):
-        size = self.configuration.memory_embedding_size
+    def forward(self, sequence: np.ndarray) -> np.ndarray:
+        """
+        Recurrent embedding over variable-length sequence.
+        Sequence is a 1D array containing multiple S-length token embeddings.
+        """
 
-        if not entries:
-            return np.zeros(size)
+        h = np.zeros(self.H, dtype=float)
 
-        weighted = []
-        weights = []
+        # Process sequence in chunks of size S
+        for i in range(0, len(sequence), self.S):
+            e = sequence[i:i+self.S]
+            if len(e) < self.S:
+                break
 
-        for entry in entries.values():
-            count = entry["count"]
-            last = entry["last_seen"]
-            w = self.ALPHA * count + self.BETA * math.exp(-self.GAMMA * last)
-            weighted.append(entry["embedding"] * w)
-            weights.append(w)
+            h = np.tanh(self.W_h @ h + self.W_e @ e + self.b)
 
-        total_w = sum(weights)
-        if total_w == 0:
-            return np.zeros(size)
-
-        return sum(weighted) / total_w
-
-    # ------------------------------------------------------------
-    # GRU-LIKE STATE UPDATE
-    # ------------------------------------------------------------
-    def _update_state(self, combined: np.ndarray):
-        x = np.concatenate([self.state, combined])
-
-        f = 1 / (1 + np.exp(-(self.W_f @ x + self.b_f)))
-        u = 1 / (1 + np.exp(-(self.W_u @ x + self.b_u)))
-        s_tilde = np.tanh(self.W_s @ x + self.b_s)
-
-        self.state = f * self.state + u * s_tilde
-
-    # ------------------------------------------------------------
-    # PUBLIC: GET NARRATIVE STATE
-    # ------------------------------------------------------------
-    def get_state(self) -> List[float]:
-        return self.state.tolist()
+        # Final projection
+        P = self.V @ h + self.c
+        return P
