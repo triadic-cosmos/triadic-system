@@ -232,7 +232,7 @@ class WriterAgent:
 
                 # GLP propose(): returns grammar+lemma pairs sorted by score
                 outputs: List[TokenLogit] = self.glp_network.propose(
-                    ModelInput(beam.ctx)
+                    ModelInput(beam.ctx, model_input.line_position)
                 )
 
                 if not outputs:
@@ -376,7 +376,8 @@ class WriterAgent:
         for _ in range(self.environment.configuration.max_attempts):
             ctx.clear_current_sentence()
 
-            model_input = ModelInput(ctx)
+            line_position = [line_nr / (lines - 1)]
+            model_input = ModelInput(ctx, line_position)
 
             # --- BEAM SEARCH MODE ---
             if beam_search and beam_attempts > 0 and keywords is not None:

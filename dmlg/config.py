@@ -86,9 +86,10 @@ class Configuration:
         return 2 * self.last_embedding_size + 3
 
     def generator_input_size(self) -> int:
+        # line position (1)
         return self.generator_current_context_size() + \
                self.narrative_state_size * self.narrative_sentences + \
-               self.lemma_input_dimension
+               self.lemma_input_dimension + 1
 
     def generator_output_size(self) -> int:
         # lemma embedding

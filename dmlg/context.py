@@ -217,6 +217,7 @@ class ContextWindow:
 @dataclass(frozen=True)
 class ModelInput:
     window: ContextWindow
+    line_position: List[float]
 
 # ============================================================
 # InputEncoder
@@ -228,9 +229,11 @@ class InputEncoder:
         current_embedding = model_input.window.get_current_embedding()
         narrative_embedding = model_input.window.get_narrative_memory_embedding()
         token_history = model_input.window.get_token_history_embedding()
+        line_position = model_input.line_position
         
         return (
             current_embedding
             + narrative_embedding
             + token_history
+            + line_position
         )

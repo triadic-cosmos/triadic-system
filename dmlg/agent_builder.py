@@ -27,12 +27,12 @@ class TrainingBatchBuilder:
         context.start_sentence()
         context.update_narrative_memory(sentence.tokens)
 
-    def build_sentence(self, index: int, sentence: CurriculumSentence, context: ContextWindow):
+    def build_sentence(self, index: int, sentence: CurriculumSentence, line_position: List[float], context: ContextWindow):
         configuration = self.agent.configuration
         sentence.batch: TrainingBatch = TrainingBatch()
-                        
+        
         # 1. create model input
-        model_input = ModelInput(context)
+        model_input = ModelInput(context, line_position)
             
         # 2. train for each token
         for tok in sentence.tokens:
@@ -50,12 +50,15 @@ class TrainingBatchBuilder:
     def build_curriculum(self, curriculum: Curriculum):
         context = self.agent.new_context()
 
-        index: int = 1
+        line: int = 0
         total_samples: int = 0
+        last_line = len(curriculum.sentences) - 1
+        
         for sentence in curriculum.sentences:
-            self.build_sentence(index, sentence, context)
+            line_position = [line / last_line]            
+            self.build_sentence(line, sentence, line_position, context)
             total_samples += len(sentence.batch.samples)
-            index += 1
+            line += 1
             
         print(f"Total {total_samples} unique samples in {len(curriculum.sentences)} sentences")
 
