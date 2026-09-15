@@ -52,48 +52,56 @@ class CurrentSentence:
 # ============================================================
 @dataclass
 class TokenHistory:
-    configuration: Configuration
+    dimension: int
+    alpha: float
 
     def __post_init__(self):
-        self.history = [0] * self.configuration.lemma_input_dimension
+        self.history = [0] * self.dimension
+        self.alpha2 = 1.0 - self.alpha
     
     def add(self, embedding: List[float]):
-        alpha1 = self.configuration.history_alpha
-        alpha2 = 1.0 - alpha1
         self.history = self.history[1:] + self.history[:1]
-        for i in range(len(embedding)):
-            self.history[i] = self.history[i] * alpha1 + embedding[i] * alpha2
+        for i in range(self.dimension):
+            self.history[i] = self.history[i] * self.alpha + embedding[i] * self.alpha2
         
     def get(self):
         return self.history
         
     def copy(self) -> "TokenHistory":
-        copy = TokenHistory(self.configuration)
+        copy = TokenHistory(self.dimension, self.alpha)
         copy.history = self.history.copy()
         return copy
-        
+    
 # ============================================================
 # Context Window
 # ============================================================
-      
+
 @dataclass
 class ContextWindow:
     configuration: Configuration
-    lemma_embedding_dict: any 
-
+    lemma_embedding_dict: any
+    
     def __post_init__(self):
-        self._current_tokens = []
-        self._token_history = TokenHistory(self.configuration)
-        self._token_history_start = TokenHistory(self.configuration)
+        self._token_histories = []
+        self._token_histories_start = [] 
+        for i in range(len(self.configuration.history_size)):
+            dimension = self.configuration.history_size[i]
+            alpha = self.configuration.history_alpha[i]
+            self._token_histories.append(TokenHistory(dimension, alpha))
+            self._token_histories_start.append(TokenHistory(dimension, alpha))
+        
+        self._current_tokens = []    
         self._current_grammar_sentence = CurrentSentence(self.configuration)        
         self._current_lemma_sentence = CurrentSentence(self.configuration)
         self.clear_current_sentence()
         self._narrative_memory = NarrativeMemory(self.lemma_embedding_dict, self.configuration)
         self._narrative_memory_embedding = None
-        
+    
     def clear_current_sentence(self):
+        for i in range(len(self._token_histories)):
+            self._token_histories[i] = self._token_histories_start[i].copy()
+
         self._current_tokens = []
-        self._token_history = self._token_history_start.copy()
         self._current_grammar_sentence.clear()
         self._current_lemma_sentence.clear()
 
@@ -102,7 +110,9 @@ class ContextWindow:
         self._last_lemma = Token.EOL
 
     def start_sentence(self):
-        self._token_history_start = self._token_history.copy()
+        for i in range(len(self._token_histories)):
+            self._token_histories_start[i] = self._token_histories[i].copy()
+        
         self.clear_current_sentence()
 
     def last_token(self) -> Token:
@@ -135,7 +145,8 @@ class ContextWindow:
             self._current_lemma_sentence.add(emb)
             if self._forelast_token.text in HISTORY_TOKENS and \
                 token.text not in HISTORY_BLACKLIST:
-                    self._token_history.add(emb)
+                    for token_history in self._token_histories:
+                        token_history.add(emb)
             
         else:
             emb = self.lemma_embedding_dict.get_input_embedding(token).embedding
@@ -181,9 +192,12 @@ class ContextWindow:
         
     def copy_current(self) -> "ContextWindow":
         ctx: ContextWindow = ContextWindow(self.configuration, self.lemma_embedding_dict)
-        ctx._current_tokens = self._current_tokens.copy()
-        ctx._token_history = self._token_history.copy()
-        ctx._token_history_start = self._token_history_start
+
+        for i in range(len(self._token_histories)):
+            ctx._token_histories[i] = self._token_histories[i].copy()
+            ctx._token_histories_start[i] = self._token_histories_start[i]                                                            
+
+        ctx._current_tokens = self._current_tokens.copy()        
         ctx._current_grammar_sentence = self._current_grammar_sentence.copy()
         ctx._current_lamma_sentence = self._current_lemma_sentence.copy()
         ctx._last_token = self._last_token
@@ -194,21 +208,17 @@ class ContextWindow:
     @property
     def current_tokens(self) -> List[Token]:
         return self._current_tokens
-    
-    def get_generator_history_embedding(self) -> List[float]:
-        if self._generator_history_embedding == None:
-            self._generator_history_embedding = get_history_embedding(
-                self._sentences, self._generator_history_sentences
-            )
-        return self._generator_history_embedding             
-    
+        
     def get_narrative_memory_embedding(self) -> List[float]:
         if self._narrative_memory_embedding == None:
             self._narrative_memory_embedding = self._narrative_memory.get_state()
         return self._narrative_memory_embedding
 
     def get_token_history_embedding(self) -> List[float]:
-        return self._token_history.get()
+        embedding = []
+        for token_history in self._token_histories:
+            embedding += token_history.get() 
+        return embedding
 
 # ============================================================
 # ModelInput

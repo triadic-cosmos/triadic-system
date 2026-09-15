@@ -18,7 +18,7 @@ class Configuration:
     # ------------------------------------------------------------
     first_hidden_size: int = 768
     other_hidden_size: int = 768
-    lemma_input_dimension: int = 48
+    lemma_input_dimension: int = 64
     lemma_output_dimension: int = 128
     total_pages: int = 1024
     max_page_input_size: int = 8
@@ -27,7 +27,8 @@ class Configuration:
     # Context parameters
     # ------------------------------------------------------------
     position_divider = 30
-    history_alpha = 0.95
+    history_size = [32, 48, 64]
+    history_alpha = [0.9, 0.95, 0.98]
 
     narrative_sentences: int = 10
     narrative_state_size: int = 32
@@ -89,7 +90,7 @@ class Configuration:
         # line position (1)
         return self.generator_current_context_size() + \
                self.narrative_state_size * self.narrative_sentences + \
-               self.lemma_input_dimension + 1
+               sum(self.history_size) + 1
 
     def generator_output_size(self) -> int:
         # lemma embedding

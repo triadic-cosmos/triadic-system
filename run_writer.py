@@ -4,9 +4,9 @@ from engine.triadic_writer import TriadicWriter
 import time
 
 MODEL = "mars"
-PREFIXES = ["50k"]
+PREFIXES = ["200k"]
 
-NUM_LINES = 111
+NUM_LINES = 2830
 NUM_STORIES = 1
 BEAM_SEARCH = False
 KEYWORDS = {}
@@ -125,11 +125,11 @@ TIME_PROMPT = [
 
 # Quote from original book
 MARS_PROMPT = [
-"The day following the coming of Vas Kor to the palace of the Prince of Helium great excitement reigned throughout the twin cities, reaching its climax in the palace of Carthoris."
-"Word had come of the abduction of Thuvia of Ptarth from her father’s court, and with it the veiled hint that the Prince of Helium might be suspected of considerable knowledge of the act and the whereabouts of the princess."
-"In the council chamber of John Carter, Warlord of Mars, was Tardos Mors, Jeddak of Helium; Mors Kajak, his son, Jed of Lesser Helium; Carthoris, and a score of the great nobles of the empire."
-"There must be no war between Ptarth and Helium, my son, said John Carter."
-"That you are innocent of the charge that has been placed against you by insinuation, we well know; but Thuvan Dihn must know it well, too."
+"Upon a massive bench of polished ersite beneath the gorgeous blooms of a giant pimalia a woman sat.",
+"Her shapely, sandalled foot tapped impatiently upon the jewel-strewn walk that wound beneath the stately sorapus trees across the scarlet sward of the royal gardens of Thuvan Dihn, Jeddak of Ptarth, as a dark-haired, red-skinned warrior bent low toward her, whispering heated words close to her ear.",
+"Ah, Thuvia of Ptarth, he cried, you are cold even before the fiery blasts of my consuming love!",
+"No harder than your heart, nor colder is the hard, cold ersite of this thrice happy bench which supports your divine and fadeless form!"
+"Tell me, O Thuvia of Ptarth, that I may still hope, that though you do not love me now, yet some day, some day, my princess."
 ]
 
 # Generation main using keywords, prompt and beam search
