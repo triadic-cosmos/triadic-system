@@ -4,9 +4,9 @@ from engine.triadic_writer import TriadicWriter
 import time
 
 MODEL = "mars"
-PREFIXES = ["200k"]
+PREFIXES = ["20k"]
 
-NUM_LINES = 2830
+NUM_LINES = 111
 NUM_STORIES = 1
 BEAM_SEARCH = False
 KEYWORDS = {}
