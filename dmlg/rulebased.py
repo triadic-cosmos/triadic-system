@@ -15,6 +15,11 @@ from .tokens import (
 BAD_START = { "them", "him", "her", "whom", "whose", "and", "or", "nor", "but", "yet", "so" }
 BAD_END = { "a", "an", "the", "as", "and", "or", "nor", "but", "so", "of", "to", "in", "on", "at", "by", "he", "her", "they", "their" }
 
+START_GRAMMAR = {
+    "<SOC>",
+    "<SOP>"
+}
+
 NO_PUNCTUATION_TOKENS = {
     "<DET>",
     "<SCONJ>",
@@ -145,8 +150,11 @@ class RuleBasedFilter:
         
         # add all grammar tokens that should be ignored during generation
         incompatible.update(IGNORED_GRAMMAR)
-
+        
         last = model_input.window.last_token()
+        if not last.is_eol():
+            incompatible.update(START_GRAMMAR)
+
         if last.is_grammar():        
             # 1. Prevent repeating the same terminal token
             incompatible.add(last.text) 

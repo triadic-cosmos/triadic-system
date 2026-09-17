@@ -31,7 +31,7 @@ class Curriculum:
     # Curriculum reader
     # ============================================================
 
-    def add_to_curriculum(self, sentences: List[str], environment: WriterEnvironment):
+    def add_to_curriculum(self, start_token: str, sentences: List[str], environment: WriterEnvironment):
         combined: str = " ".join(sentences)
         split = re.split("<SPLIT>", combined)
         
@@ -43,6 +43,8 @@ class Curriculum:
                 continue
             
             eol = s.replace("<COMMA> <PERIOD>", "<PERIOD>") + " <EOL>"
+            if i == 1 and start_token:
+                eol = start_token + eol
             tokens = [self.token_dictionary.add_and_get(t) for t in eol.split(" ") if t != ""]
             natural = environment.grammar.convert_from_canonical(eol)
             self.sentences.append(CurriculumSentence(tokens, natural))
@@ -56,22 +58,29 @@ class Curriculum:
             lines = f.read().splitlines()
 
         sentences = []
+        start_token = "<SOC> "
 
         for line in lines:
             line = preprocess_line(line)
-            if len(line) < 5 and len(sentences) > 0:
-                self.add_to_curriculum(sentences, environment)
-                sentences = []
-                if len(self.sentences) >= environment.configuration.max_sentences:
-                    break
-                continue
+            if len(line) < 5:
+                if not start_token:
+                    start_token = "<SOP> "
+                if len(sentences) > 0:
+                    self.add_to_curriculum(start_token, sentences, environment)
+                    start_token = None
+                    sentences = []
+                    if len(self.sentences) >= environment.configuration.max_sentences:
+                        break
+                    continue
                 
             doc = environment.grammar.nlp(line)
             
             for sent in doc.sents:
-                source = sent.text
-                if is_all_caps(source):
+                source = sent.text.rstrip().lstrip()
+                if is_all_caps_title(source):
                     # this is likely a chapter title
+                    print(f"CHAPTER = |{source}|")
+                    start_token = "<SOC> "
                     continue 
                 canonical = environment.grammar.convert_to_canonical(source)
                 natural = environment.grammar.convert_from_canonical(canonical)
@@ -80,7 +89,7 @@ class Curriculum:
                 else:
                     print(f"ROUNDTRIP {sent} -> {natural} <- {canonical}")
                         
-        self.add_to_curriculum(sentences, environment)
+        self.add_to_curriculum(start_token, sentences, environment)
         
         print(f"curriculum sentences = {len(self.sentences)}")
 
@@ -108,12 +117,12 @@ class Curriculum:
     
             print(f"curriculum sentences = {len(self.sentences)}")
 
-def is_all_caps(s: str) -> bool:
-    return not any(c.islower() for c in s)
+def is_all_caps_title(s: str) -> bool:
+    return len(s) > 2 and any(c.isupper() for c in s) and not any(c.islower() for c in s)
 
 def preprocess_line(line: str) -> str:
     line = re \
-        .sub("[\[\]‑\-—_\“\”‘]", " ", line) \
+        .sub("[\[\]‑\-—_\“\”‘…]", " ", line) \
         .replace("!)", ",") \
         .replace("),", ",") \
         .replace("[;:()]", ",") \

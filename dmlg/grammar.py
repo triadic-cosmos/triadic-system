@@ -346,6 +346,16 @@ class GrammarEngine:
             if tok == "<EOL>":
                 i += 1
                 continue
+            
+            if tok == "<SOC>":
+                output.append("$")
+                i += 1
+                continue
+            
+            if tok == "<SOP>":
+                output.append("#")
+                i += 1
+                continue
 
             # Simple tags
             if tok in ("<DET>", "<NUM>", "<ADJ>", "<ADV>", "<SCONJ>", "<CCONJ>", 
@@ -442,7 +452,10 @@ class GrammarEngine:
         text = " ".join(output)
         text = text.replace(" .", ".").replace(" !", "!").replace(" ?", "?").replace(" ,", ",")
         if text:
-            text = text[0].upper() + text[1:]
+            if text[0] == '$' or text[0] == '#':
+                text = text[:2] + text[2].upper() + text[3:]
+            else:
+                text = text[0].upper() + text[1:]            
         fixed = self.fix_natural(text)
         return fixed
 

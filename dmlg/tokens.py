@@ -34,6 +34,8 @@ GRAMMAR_TOKENS = [
     "<EXCLAMATION>",
     "<QUESTION>",
     "<EOL>",
+    "<SOC>",    
+    "<SOP>"
 ]
 
 HISTORY_TOKENS = {
@@ -57,6 +59,8 @@ TERMINAL_TOKENS = {
     "<EXCLAMATION>",
     "<QUESTION>",
     "<EOL>",
+    "<SOC>",
+    "<SOP>"
 }
 
 END_PUNCTIATION_TOKENS = {
@@ -173,7 +177,9 @@ class Token:
 
 
 # Initialize static tokens
-Token.EOL = Token("<EOL>")
+Token.EOL = Token("<EOL>") # end of line
+Token.SOC = Token("<SOC>") # start of chapter
+Token.SOP = Token("<SOP>") # start of paragraph
 Token.PERIOD = Token("<PERIOD>")
 Token.EXCLAMATION = Token("<EXCLAMATION>")
 Token.QUESTION = Token("<QUESTION>")

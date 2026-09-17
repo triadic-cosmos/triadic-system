@@ -441,7 +441,7 @@ class WriterAgent:
     ):
         index = 1
 
-        with open(output_path, "w", encoding="utf-8-sig") as file:
+        with open(output_path, "w", encoding="utf-8-sig") as file:            
             while index <= amount:
                 # Create new context
                 ctx = self.new_context()
@@ -455,9 +455,25 @@ class WriterAgent:
                     beam_search=beam_search
                 )
 
-                # Write fixed sentences to output
+                # Write sentences to output
+                file.write(f"========== BOOK {index} ==========\n")
+                
+                chapter = 1
+                title = True
                 for sentence in story.sentences:
-                    file.write(sentence.fixed + "\n")
+                    line = sentence.fixed
+                    if line[0] == '$':
+                        line = line[2:]
+                        title = True                        
+                    elif line[0] == '#':
+                        line = line[2:]                        
+                        if not title:
+                            file.write("\n")
+                    if title:
+                        file.write(f"\n   CHAPTER {chapter}.\n\n")     
+                        title = False
+                        chapter += 1
+                    file.write(line + "\n")
 
                 file.write("\n")
                 index += 1
