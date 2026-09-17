@@ -16,29 +16,29 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 768
-    other_hidden_size: int = 768
-    lemma_input_dimension: int = 80
+    first_hidden_size: int = 1024
+    other_hidden_size: int = 1024
+    lemma_input_dimension: int = 96
     lemma_output_dimension: int = 128
     total_pages: int = 1000000
     max_page_input_size: int = 1
-
+    
     # ------------------------------------------------------------
     # Context parameters
     # ------------------------------------------------------------
     position_divider = 30
     
-    history_size = [16, 32, 48, 64, 80]
-    history_alpha = [0.85, 0.9, 0.95, 0.97, 0.99]
-
-    narrative_sentences: int = 15
+    history_size = [8, 16, 32, 48, 64, 80, 96]
+    history_alpha = [0.8, 0.85, 0.9, 0.95, 0.97, 0.98, 0.99]
+    
+    narrative_sentences: int = 20
     narrative_state_size: int = 32
     narrative_hidden_size: int = 64
     narrative_token_size: int = 8
     
-    last_embeddings: int = 5
+    last_embeddings: int = 10
     last_embedding_size: int = 16
-
+    
     # ------------------------------------------------------------
     # Curriculum parameters
     # ------------------------------------------------------------
@@ -57,14 +57,14 @@ class Configuration:
     # ------------------------------------------------------------
     # Generation parameters
     # ------------------------------------------------------------
-    min_words: int = 5
-    max_words: int = 20
+    min_words: int = 8
+    max_words: int = 30
     max_tokens: int = 70
     story_lines: int = 20
-    max_attempts: int = 10000
+    max_attempts: int = 20000
 
     # Sampling
-    top_k: int = 8
+    top_k: int = 15
     temperature: float = 0.001
     
     # Beam-search

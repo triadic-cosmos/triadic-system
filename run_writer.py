@@ -4,34 +4,12 @@ from engine.triadic_writer import TriadicWriter
 import time
 
 MODEL = "mars"
-PREFIXES = ["20k"]
+PREFIXES = ["200k"]
 
-NUM_LINES = 111
+NUM_LINES = 3000
 NUM_STORIES = 1
 BEAM_SEARCH = False
 KEYWORDS = {}
-
-FOREST_PROMPT = [
-"Cold night presses against silent forest. ",
-"The rabbit waits near broken stump. ",
-"Distant cracking echoes through dark pines! ",
-"The raccoon watches from shadowed hollow. ",
-"He senses something wrong nearby. ",
-"The fox stalks between twisted roots. ",
-"Cold wind scrapes across brittle leaves. ",
-"Sudden silence chokes the clearing. ",
-"The fox steps closer with hungry intent. ",
-"The rabbit bolts across dead brush! ",
-"The raccoon shouts warning into cold dark. ",
-"The fox chases fast along narrow trail. ",
-"Branches whip past fleeing shapes. ",
-"The rabbit stumbles near rotten log! ",
-"The raccoon leaps forward blocking fox. ",
-"He swings branch hard downward. ",
-"The fox halts under sudden fear. ",
-"The rabbit crawls behind fallen stones. ",
-"Forest breathes dark lessons learned tonight."
-]
 
 PLANET_PROMPT = [
 "Long before any telescope detected its presence, Earth began to experience a series of subtle disturbances that rippled through the planet’s physical and cognitive systems, emerging first as faint deviations in gravitational baselines, then as curious oscillations in magnetospheric density, and finally as a persistent modulation in quantum‑sensor arrays that pulsed with a rhythm too deliberate to be dismissed as random noise. ",
@@ -54,26 +32,6 @@ PLANET_PROMPT = [
 "Governments attempted to respond, but their systems faltered under the weight of phenomena no protocol had ever anticipated, leaving humanity suspended in a state of collective anticipation. ",
 "The emissary remained motionless, radiating a quiet, patient presence that suggested it had not come to collide or conquer, but to begin the integration of Earth into a larger cosmic architecture whose scope extended far beyond human understanding. ",
 "And deep within the luminous fissure, beneath layers of obsidian crust and triadic light, the pulse grew stronger — steady, deliberate, ancient; a signal that hinted that the true structure of the cosmos was only now beginning to unfold, and that humanity, whether ready or not, had already stepped across the threshold into a story far older than its own. "
-]
-
-ODYSSEY_PROMPT = [
-"The dawn rose over the quiet sea, painting the waves with bronze light.",
-"Odysseus stood upon the shore, his cloak heavy with salt and memory.",
-"He had wandered through storms, through islands ruled by beasts and gods, yet his heart still carried the distant shape of Ithaca.",
-"The wind murmured around him like an old companion, speaking of paths unseen and dangers yet unmeasured.",
-"He tightened his grip on the staff that had guided him through foreign lands.",
-"Behind him, the ship rested upon the sand like a weary animal.",
-"He walked toward the cliffs where gulls cried above the foam.",
-"Each step echoed the weight of years spent far from home.",
-"He paused at a narrow arch of stone carved by ancient tides.",
-"Beyond it lay a valley veiled in mist, untouched by mortal hands.",
-"A river wound through the grass like a silver thread.",
-"Odysseus knelt beside it, watching his reflection ripple into shifting shapes.",
-"He felt the earth tremble faintly, as though the gods whispered beneath the soil.",
-"A distant rumble rose from the mountains, neither thunder nor beast.",
-"He stood, heart steady, gaze fixed upon the trembling horizon.",
-"The valley seemed to wait, holding its breath.",
-"Odysseus stepped forward, guided by fate’s unseen hand, for every wanderer must one day walk into the mist and claim his name."
 ]
 
 ALICE_PROMPT = [
@@ -139,6 +97,6 @@ print("Generating stories...")
 
 for prefix in PREFIXES:
     writer: TriadicWriter = TriadicWriter(MODEL, prefix, NUM_LINES)
-    writer.write(NUM_STORIES, MARS_PROMPT, KEYWORDS, BEAM_SEARCH)
+    writer.write(NUM_STORIES, TIME_PROMPT, KEYWORDS, BEAM_SEARCH)
 
 print(f"Time: {time.perf_counter() - start:.1f} s")

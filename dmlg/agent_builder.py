@@ -1,7 +1,9 @@
 # agent_builder.py
 from dataclasses import dataclass, field
-from typing import List
+from os.path import isfile, join
+from os import listdir
 from pathlib import Path
+from typing import List
 
 from .grammar import GrammarEngine
 from .semantic import SemanticEngine
@@ -47,20 +49,24 @@ class TrainingBatchBuilder:
         # log statistics for batch
         sentence.batch.show(index)        
 
-    def build_curriculum(self, curriculum: Curriculum):
-        context = self.agent.new_context()
-
-        line: int = 0
+    def build_curriculum(self, curriculum_list: List[Curriculum]) -> Curriculum:
+        combined_curriculum = Curriculum()
         total_samples: int = 0
-        last_line = len(curriculum.sentences) - 1
         
-        for sentence in curriculum.sentences:
-            line_position = [line / last_line]            
-            self.build_sentence(line, sentence, line_position, context)
-            total_samples += len(sentence.batch.samples)
-            line += 1
+        for curriculum in curriculum_list:
+            line: int = 0
+            last_line = len(curriculum.sentences) - 1
+            context = self.agent.new_context()
             
-        print(f"Total {total_samples} unique samples in {len(curriculum.sentences)} sentences")
+            for sentence in curriculum.sentences:
+                line_position = [line / last_line]            
+                self.build_sentence(line, sentence, line_position, context)
+                total_samples += len(sentence.batch.samples)
+                line += 1
+                combined_curriculum.sentences.append(sentence)
+                            
+        print(f"Total {total_samples} unique samples in {len(combined_curriculum.sentences)} sentences")
+        return combined_curriculum
 
 @dataclass
 class AgentBuilder:
@@ -78,8 +84,8 @@ class AgentBuilder:
     def curriculum_filename(self, environment: WriterEnvironment, curriculum: str) -> str:
         return self.environment_path(environment) + curriculum + ".txt"
 
-    def preprocessed_filename(self, environment: WriterEnvironment, curriculum: str) -> str:
-        return self.environment_path(environment) + curriculum + TOKENS_FILENAME
+    def curriculum_folder_filename(self, environment: WriterEnvironment, curriculum: str) -> str:
+        return self.environment_path(environment) + curriculum
 
     def model_filename(self, environment: WriterEnvironment) -> str:
         return self.environment_path(environment) + environment.prefix + MODEL_FILENAME
@@ -89,7 +95,7 @@ class AgentBuilder:
             return self.environment_path(environment) + environment.prefix + OUTPUT_FILENAME
         else:
             return self.environment_path(environment) + environment.prefix + OUTPUT_NO_PAGING_FILENAME
-            
+
     def load_or_create_agent(self, environment: WriterEnvironment) -> WriterAgent:
         name = environment.configuration.name
         if Path(self.model_filename(environment)).is_file():
@@ -100,25 +106,32 @@ class AgentBuilder:
             agent = WriterAgent(environment, name)
         return agent
         
-    def build_curriculum(self, environment: WriterEnvironment, name: str) -> Curriculum:
-        preprocessed_filename = self.preprocessed_filename(environment, name)
-        curriculum = Curriculum()
-        if Path(preprocessed_filename).is_file():
-            curriculum.read_prepocessed(preprocessed_filename, environment)
-            print(f"Read preprocessed curriculum from {preprocessed_filename}.")
-        else: 
-            curriculum_filename = self.curriculum_filename(environment, name)
-            curriculum.read_curriculum(curriculum_filename, environment)
-            curriculum.write_curriculum(preprocessed_filename)
-            print(f"Created curriculum from {curriculum_filename}.")
-        print(curriculum)
-        return curriculum
+    def build_curriculum(self, environment: WriterEnvironment, name: str) -> List[Curriculum]:
+        folder_filename = self.curriculum_folder_filename(environment, name)
+        files = [join(folder_filename, f) for f in listdir(folder_filename)]
+        book_files = [f for f in files if isfile(f) and f.endswith(".txt") and not "_tokens" in f]
+        print(f"curriculum files = {len(book_files)}")
+
+        curriculum_list = []
+        for curriculum_filename in book_files:            
+            preprocessed_filename = curriculum_filename.replace(".txt","_tokens.txt")            
+            curriculum = Curriculum()
+            if Path(preprocessed_filename).is_file():
+                curriculum.read_prepocessed(preprocessed_filename, environment)
+                print(f"Read preprocessed curriculum from {preprocessed_filename}.")
+            else: 
+                curriculum.read_curriculum(curriculum_filename, environment)
+                curriculum.write_curriculum(preprocessed_filename)
+                print(f"Created curriculum from {curriculum_filename}.")
+            curriculum_list.append(curriculum)
+
+        return curriculum_list
 
     def build_environment(self, configuration: Configuration, prefix: str) -> WriterEnvironment:
         environment = WriterEnvironment(configuration, self.grammar, self.semantic, prefix)
         return environment
-                      
-    def train_agent(self, environment: WriterEnvironment, curriculum: Curriculum):
+    
+    def train_agent(self, environment: WriterEnvironment, curriculum: List[Curriculum]):
         print("Training agent from curriculum...")
         
         random_epochs = environment.configuration.random_epochs
@@ -127,7 +140,7 @@ class AgentBuilder:
         agent: WriterAgent = self.load_or_create_agent(environment)
 
         training_builder: TrainingBatchBuilder = TrainingBatchBuilder(agent)
-        training_builder.build_curriculum(curriculum)
+        combined_curriculum: Curriculum = training_builder.build_curriculum(curriculum)
         
-        agent.train_curriculum(curriculum, random_epochs)        
+        agent.train_curriculum(combined_curriculum, random_epochs)        
         agent.save(self.model_filename(environment))
