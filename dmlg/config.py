@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 NR_TOKENS_SLOTS = 6
-TOP_BOOST = [4, 3, 3, 2, 2]
+TOP_BOOST = [1.3, 1.2, 1.1]
 
 # Paging configuration
 ENABLE_PAGING = True
@@ -64,7 +64,7 @@ class Configuration:
     max_attempts: int = 20000
 
     # Sampling
-    top_k: int = 15
+    top_k: int = 50
     temperature: float = 0.001
     
     # Beam-search
