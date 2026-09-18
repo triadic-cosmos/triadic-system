@@ -47,3 +47,6 @@ class WriterParams:
     beam_jitter: float = 0.5
     beam_attempts: int = 3
     beam_temperature: float = 0.8
+    top_boost = [1.3, 1.2, 1.1]
+    enable_paging = True
+    max_pageless_vocab = 2048

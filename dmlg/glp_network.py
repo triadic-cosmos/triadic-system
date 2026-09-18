@@ -7,7 +7,7 @@ import random
 import torch
 import torch.nn.functional as F
 
-from .config import Configuration, ENABLE_PAGING, MAX_PAGELESS_VOCAB
+from .config import Configuration
 from .tokens import (
     Token,
     TargetToken,
@@ -17,6 +17,7 @@ from .tokens import (
     LemmaEmbeddingDictionary,
     GRAMMAR_TOKENS
 )
+from .writer_story import WriterParams
 from .context import ModelInput, InputEncoder
 from .neural import NeuralNetwork
 from .training import TrainingSample, TrainingBatch
@@ -180,7 +181,7 @@ class GlpNetwork:
     # Inference
     # ------------------------------------------------------------
     
-    def propose(self, model_input: ModelInput):
+    def propose(self, params: WriterParams, model_input: ModelInput):
         # Deterministic end of line after end punctuation
         if model_input.window.last_token().is_end_punctuation():
             return [TokenLogit(Token.EOL, Token.EOL, 1.0)]
@@ -198,7 +199,7 @@ class GlpNetwork:
         # TARGET TOKENS: only from selected page
         page_pairs: List[TokenLogit] = []
         # This mode uses the graph for target routing like DMLG
-        if ENABLE_PAGING:
+        if params.enable_paging:
             # PAGE ROUTING: use page graph transitions, default to first page with EOL
             last_lemma = model_input.window.last_lemma_token()
             page = self.pages.get(last_lemma, self.page_list[0])    
@@ -210,11 +211,11 @@ class GlpNetwork:
                 for p in self.page_list:
                     self.output_tokens.update(p.output_tokens)
                 print(f"Built vocab of {len(self.output_tokens)} target tokens.")
-            if MAX_PAGELESS_VOCAB < len(self.output_tokens):
+            if params.max_pageless_vocab < len(self.output_tokens):
                 # Use random shuffle of vocab with period terminal token
                 output_tokens = list(self.output_tokens)
                 random.shuffle(output_tokens)
-                output_tokens = output_tokens[:MAX_PAGELESS_VOCAB]
+                output_tokens = output_tokens[:params.max_pageless_vocab]
                 output_tokens.append(TargetToken.PERIOD)
             else:
                 # Use complete vocab in pageless mode

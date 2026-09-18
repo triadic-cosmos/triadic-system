@@ -2,13 +2,6 @@
 from dataclasses import dataclass, field
 from typing import List
 
-NR_TOKENS_SLOTS = 6
-TOP_BOOST = [1.3, 1.2, 1.1]
-
-# Paging configuration
-ENABLE_PAGING = True
-MAX_PAGELESS_VOCAB = 2048
-
 @dataclass
 class Configuration:
     name: str

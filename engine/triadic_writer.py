@@ -24,5 +24,5 @@ class TriadicWriter:
     def write(self, params: WriterParams):
         print("Generating output...")
 
-        output_filename = self.builder.output_filename(self.agent.environment)
+        output_filename = self.builder.output_filename(params, self.agent.environment)
         self.agent.build_output(output_filename, params)

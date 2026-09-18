@@ -6,7 +6,7 @@ import random
 import pickle
 import math
 
-from .config import Configuration, TOP_BOOST
+from .config import Configuration
 from .writer_environment import WriterEnvironment
 from .writer_story import WriterStory, WriterSentence, WriterParams
 from .tokens import Token, TokenDictionary, TokenLogit
@@ -119,7 +119,7 @@ class WriterAgent:
     # ------------------------------------------------------------
 
     def propose_token(self, params: WriterParams, model_input: ModelInput) -> Optional[TokenLogit]:
-        outputs: List[TokenLogit] = self.glp_network.propose(model_input)
+        outputs: List[TokenLogit] = self.glp_network.propose(params, model_input)
 
         if not outputs:
             return None
@@ -133,12 +133,12 @@ class WriterAgent:
         logits = [c.logit for c in candidates]
         min_logit = min(logits)
         size = len(logits)
-        boost_size = len(TOP_BOOST)
+        boost_size = len(params.top_boost)
         
         for o in range(size):
             logits[o] = logits[o] - min_logit + temperature
             if o < boost_size:
-                logits[o] = logits[o] * TOP_BOOST[o]
+                logits[o] = logits[o] * params.top_boost[o]
         total = sum(logits)
         if total == 0:
             probs = logits
@@ -230,7 +230,9 @@ class WriterAgent:
 
                 # GLP propose(): returns grammar+lemma pairs sorted by score
                 outputs: List[TokenLogit] = self.glp_network.propose(
-                    ModelInput(beam.ctx, model_input.line_position)
+                    params,
+                    ModelInput(beam.ctx, model_input.line_position,
+                               model_input.allow_chapter, model_input.allow_paragraph)
                 )
 
                 if not outputs:

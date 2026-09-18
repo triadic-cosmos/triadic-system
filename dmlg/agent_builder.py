@@ -7,8 +7,10 @@ from typing import List
 
 from .grammar import GrammarEngine
 from .semantic import SemanticEngine
-from .config import Configuration, ENABLE_PAGING
+from .config import Configuration
 from .context import ContextWindow
+from .writer_story import WriterParams
+
 from .writer_agent import WriterAgent, ModelInput
 from .writer_environment import WriterEnvironment
 from .curriculum import Curriculum, CurriculumSentence
@@ -90,8 +92,8 @@ class AgentBuilder:
     def model_filename(self, environment: WriterEnvironment) -> str:
         return self.environment_path(environment) + environment.prefix + MODEL_FILENAME
 
-    def output_filename(self, environment: WriterEnvironment) -> str:
-        if ENABLE_PAGING:
+    def output_filename(self, params: WriterParams, environment: WriterEnvironment) -> str:
+        if params.enable_paging:
             return self.environment_path(environment) + environment.prefix + OUTPUT_FILENAME
         else:
             return self.environment_path(environment) + environment.prefix + OUTPUT_NO_PAGING_FILENAME
