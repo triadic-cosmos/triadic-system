@@ -36,7 +36,7 @@ class TrainingBatchBuilder:
         sentence.batch: TrainingBatch = TrainingBatch()
         
         # 1. create model input
-        model_input = ModelInput(context, line_position)
+        model_input = ModelInput(context, line_position, True, True)
             
         # 2. train for each token
         for tok in sentence.tokens:
