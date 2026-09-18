@@ -53,26 +53,6 @@ class Configuration:
     random_epochs: int = 1000
     epochs_step: int = 10
     show_epochs_step: int = 100
-
-    # ------------------------------------------------------------
-    # Generation parameters
-    # ------------------------------------------------------------
-    min_words: int = 8
-    max_words: int = 30
-    max_tokens: int = 70
-    story_lines: int = 20
-    max_attempts: int = 20000
-
-    # Sampling
-    top_k: int = 50
-    temperature: float = 0.001
-    
-    # Beam-search
-    nr_of_beams: int = 3
-    beam_alpha: float = 0.8
-    beam_jitter: float = 0.5
-    beam_attempts: int = 3
-    beam_temperature: float = 0.8
     
     # ------------------------------------------------------------
     # Derived sizes

@@ -60,7 +60,7 @@ class CurrentSentence:
         return self.grammar + self.lemma + [self.punctuation] + [cur_pos]
     
     def copy(self) -> "CurrentSentence":
-        copy = CurrentPosition(self.lemma_embedding_dict, self.amount, self.size, self.divider, self.punctuation)
+        copy = CurrentSentence(self.lemma_embedding_dict, self.amount, self.size, self.divider)
         copy.grammar = self.grammar.copy()
         copy.lemma = self.lemma.copy()
         copy.position = self.position
@@ -215,6 +215,8 @@ class ContextWindow:
 class ModelInput:
     window: ContextWindow
     line_position: List[float]
+    allow_chapter: bool
+    allow_paragraph: bool
 
 # ============================================================
 # InputEncoder

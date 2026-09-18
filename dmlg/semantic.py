@@ -6,6 +6,7 @@ import re
 
 from .config import Configuration
 from .rulebased import BAD_START, BAD_END
+from .writer_story import WriterParams
 
 VERBOSE = False
 
@@ -17,7 +18,7 @@ class SemanticEngine:
         cleaned = sentence.strip().translate(str.maketrans("", "", string.punctuation))
         return cleaned.lower().split()
 
-    def validate(self, previous: List[str], sentence: str) -> bool:
+    def validate(self, params: WriterParams, previous: List[str], sentence: str) -> bool:
         # check if sentence ends with punctuation
         if not (sentence.endswith(".") or sentence.endswith("!") or sentence.endswith("?")):
             print("PUNCTUATION")
@@ -32,12 +33,12 @@ class SemanticEngine:
 
         # minimum and maximum number of words
         nr_words = len(words)
-        if nr_words < self.configuration.min_words:
+        if nr_words < params.min_words:
             if VERBOSE:
                 print("MIN_LENGTH")
             return False
         
-        if nr_words > self.configuration.max_words:
+        if nr_words > params.max_words:
             # can happen, this is not logged as error condition
             return False
 

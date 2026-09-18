@@ -151,6 +151,12 @@ class RuleBasedFilter:
         # add all grammar tokens that should be ignored during generation
         incompatible.update(IGNORED_GRAMMAR)
         
+        # structural tokens
+        if not model_input.allow_chapter:
+            incompatible.add(Token.SOC.text)
+        if not model_input.allow_paragraph:
+            incompatible.add(Token.SOP.text)
+        
         last = model_input.window.last_token()
         if not last.is_eol():
             incompatible.update(START_GRAMMAR)

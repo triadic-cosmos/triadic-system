@@ -34,10 +34,12 @@ from .context import (
 
 # --- Writer System --------------------------------------------------------
 
-from .writer_agent import (
-    WriterAgent,
-    WriterStory,
+from .writer_agent import WriterAgent
+
+from .writer_story import (
+    WriterParams,
     WriterSentence,
+    WriterStory
 )
 
 from .writer_environment import WriterEnvironment

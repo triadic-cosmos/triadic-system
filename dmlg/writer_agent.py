@@ -8,14 +8,14 @@ import math
 
 from .config import Configuration, TOP_BOOST
 from .writer_environment import WriterEnvironment
-from .writer_story import WriterStory, WriterSentence
+from .writer_story import WriterStory, WriterSentence, WriterParams
 from .tokens import Token, TokenDictionary, TokenLogit
 from .context import ContextWindow, ModelInput
 from .glp_network import GlpNetwork, TrainingBatch
 from .curriculum import Curriculum, CurriculumSentence
 
 GRAMMAR_CHECK = False
-
+    
 @dataclass
 class WriterAgent:
     environment: WriterEnvironment
@@ -32,12 +32,8 @@ class WriterAgent:
         self.environment = environment
         self.configuration = self.environment.configuration
         self.id = id
-
         self.rng = random.Random()
-
-        self.max_tokens = self.environment.configuration.max_tokens
         self.token_dictionary = TokenDictionary()
-
         self.glp_network = GlpNetwork(self.configuration, self.token_dictionary)
 
     def __str__(self):
@@ -122,18 +118,18 @@ class WriterAgent:
     # Generation
     # ------------------------------------------------------------
 
-    def propose_token(self, model_input: ModelInput) -> Optional[TokenLogit]:
+    def propose_token(self, params: WriterParams, model_input: ModelInput) -> Optional[TokenLogit]:
         outputs: List[TokenLogit] = self.glp_network.propose(model_input)
 
         if not outputs:
             return None
 
         # top-k pairs
-        top_k = self.environment.configuration.top_k
+        top_k = params.top_k
         candidates = outputs[:top_k]
 
         # sampling using pair scores
-        temperature = self.environment.configuration.temperature
+        temperature = params.temperature
         logits = [c.logit for c in candidates]
         min_logit = min(logits)
         size = len(logits)
@@ -154,12 +150,14 @@ class WriterAgent:
         # return full TokenLogit (grammar + lemma + logit)
         return selected
 
-    def generate_sentence(self, model_input: ModelInput, sentences: List[str]) -> WriterSentence:
+    def generate_sentence(
+            self, params: WriterParams,
+            model_input: ModelInput, sentences: List[str]) -> WriterSentence:
         generated: List[Token] = []
         ctx: ContextWindow = model_input.window
 
-        for _ in range(self.max_tokens):
-            proposal: TokenLogit = self.propose_token(model_input)
+        for _ in range(params.max_tokens):
+            proposal: TokenLogit = self.propose_token(params, model_input)
             if proposal is None:
                 break
 
@@ -183,7 +181,7 @@ class WriterAgent:
                     natural = self.environment.grammar.convert_from_canonical_tokens(generated)
             
                     # semantic validation
-                    if self.environment.semantic.validate(sentences, natural):
+                    if self.environment.semantic.validate(params, sentences, natural):
                         return WriterSentence(generated, natural)
 
                 # failed quality check
@@ -195,7 +193,7 @@ class WriterAgent:
         return None
 
     def generate_sentence_beam_search(
-        self, model_input: ModelInput,
+        self, params: WriterParams, model_input: ModelInput,
         keyword_scores: dict, used_tokens: set, sentences: List[str]
     ) -> WriterSentence:
 
@@ -207,11 +205,11 @@ class WriterAgent:
                 self.eol = self.tokens[-1].is_eol() if self.tokens else False
 
         # --- config parameters ---
-        temperature = self.environment.configuration.beam_temperature
-        alpha = self.environment.configuration.beam_alpha
-        jitter_amp = self.environment.configuration.beam_jitter
-        max_tokens = self.environment.configuration.max_tokens
-        nr_of_beams = self.environment.configuration.nr_of_beams
+        temperature = params.beam_temperature
+        alpha = params.beam_alpha
+        jitter_amp = params.beam_jitter
+        max_tokens = params.max_tokens
+        nr_of_beams = params.nr_of_beams
 
         # --- initialize ---
         beams: List[Beam] = [Beam([], model_input.window.copy_current(), 0)]
@@ -239,7 +237,7 @@ class WriterAgent:
                     continue
 
                 # --- top-k pairs ---
-                top_k = self.environment.configuration.top_k
+                top_k = params.top_k
                 candidates = outputs[:top_k]
 
                 # --- softmax over pair-scores ---
@@ -295,7 +293,7 @@ class WriterAgent:
                             if not self.environment.grammar.basic_validate_grammar_tokens(new_tokens):
                                 continue
                             natural = self.environment.grammar.convert_from_canonical_tokens(new_tokens)
-                            if not self.environment.semantic.validate(sentences, natural):
+                            if not self.environment.semantic.validate(params, sentences, natural):
                                 continue
                             best_sentence = WriterSentence(new_tokens, natural)
                             best_score = new_beam.score
@@ -345,17 +343,18 @@ class WriterAgent:
         self,
         prefix: str,
         ctx: ContextWindow,
-        prompt: List[str] = None,
-        keywords: Set[str] = None,
-        beam_search: bool = False
+        params: WriterParams
     ) -> WriterStory:
 
         line_nr: int = 0
-        lines: int = self.environment.configuration.story_lines
+        lines: int = params.lines
+        chapter_lines = 0
+        paragraph_lines = 0
+        fraction_multiplier: float = (params.to_line_fraction - params.from_line_fraction) / (lines - 1)
 
-        # Prompt injection
-        if prompt is not None and len(prompt) > 0:
-            for prompt_line in prompt:
+        # 1. Prompt injection
+        if params.prompt is not None and len(params.prompt) > 0:
+            for prompt_line in params.prompt:
                 raw_tokens = self.environment.grammar.convert_to_canonical_tokens(prompt_line)
                 tokens = [self.token_dictionary.add_and_get(t.text) for t in raw_tokens]
                 self.update_context_tokens(ctx, tokens)
@@ -363,9 +362,9 @@ class WriterAgent:
         sentences = []
         writer_sentences = []
 
-        # Keyword scoring (lemma or terminal tokens)
-        if keywords is not None:
-            keyword_scores = {kw: 1.0 for kw in keywords}
+        # 2. Keyword scoring (lemma or terminal tokens)
+        if params.keywords is not None:
+            keyword_scores = {kw: 1.0 for kw in params.keywords}
             used_tokens = set()
 
         print("> generating", end=" ")
@@ -373,15 +372,18 @@ class WriterAgent:
         beam_attempts = self.configuration.beam_attempts
 
         # 3. Generate story line per line
-        for _ in range(self.environment.configuration.max_attempts):
+        for _ in range(params.max_attempts):
             ctx.clear_current_sentence()
 
-            line_position = [line_nr / (lines - 1)]
-            model_input = ModelInput(ctx, line_position)
+            line_position = [params.from_line_fraction + line_nr * fraction_multiplier]
+            allow_chapter = chapter_lines >= params.min_lines_chapter
+            allow_paragraph = paragraph_lines >= params.min_lines_paragraph
+            model_input = ModelInput(ctx, line_position, allow_chapter, allow_paragraph)
 
             # --- BEAM SEARCH MODE ---
-            if beam_search and beam_attempts > 0 and keywords is not None:
+            if params.beam_search and beam_attempts > 0 and params.keywords is not None:
                 sentence = self.generate_sentence_beam_search(
+                    params,
                     model_input,
                     keyword_scores,
                     used_tokens,
@@ -400,7 +402,7 @@ class WriterAgent:
 
             # --- NORMAL MODE ---
             else:
-                sentence = self.generate_sentence(model_input, sentences)
+                sentence = self.generate_sentence(params, model_input, sentences)
                 if not sentence:
                     continue
 
@@ -414,9 +416,19 @@ class WriterAgent:
             # 6. Update context window
             self.update_context(ctx, sentence)
 
+            # 7. Update line information
             line_nr += 1
             if line_nr == lines:
-                break
+                break            
+            if sentence.tokens[0].text == Token.SOC.text:
+                chapter_lines = 0
+                paragraph_lines = 0
+            elif sentence.tokens[0].text == Token.SOP.text:
+                chapter_lines += 1
+                paragraph_lines = 0
+            else:
+                chapter_lines += 1
+                paragraph_lines += 1
 
             beam_attempts = self.configuration.beam_attempts
 
@@ -431,32 +443,22 @@ class WriterAgent:
         print(f"{prefix}. {story.get_story()}")
         return story
 
-    def build_output(
-        self,
-        output_path: str,
-        amount: int,
-        prompt: List[str] = None,
-        keywords: Set[str] = None,
-        beam_search: bool = False
-    ):
+    def build_output(self, output_path: str, params: WriterParams):
         index = 1
 
         with open(output_path, "w", encoding="utf-8-sig") as file:            
-            while index <= amount:
+            while index <= params.amount:
                 # Create new context
                 ctx = self.new_context()
 
                 # Generate story
                 story = self.write_story(
-                    prefix=f"STORY-{index}",
+                    prefix=f"OUTPUT-{index}",
                     ctx=ctx,
-                    prompt=prompt,
-                    keywords=keywords,
-                    beam_search=beam_search
-                )
+                    params=params)
 
                 # Write sentences to output
-                file.write(f"========== BOOK {index} ==========\n")
+                file.write(f"========== OUTPUT {index} ==========\n")
                 
                 chapter = 1
                 title = True
