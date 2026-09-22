@@ -69,7 +69,9 @@ class TriadicLLM:
         prompt = fix_prompt + " ".join(lines)
         answer = self.generate(prompt, max_tokens)
         print(answer)
+        
         filtered = []
+        finished = False
         
         for line in answer.split("\n"):
             line = clean_line(line)
@@ -82,7 +84,6 @@ class TriadicLLM:
                "corrected" in lower_line or \
                "revised" in lower_line:
                 continue
-            finished = False
             for output_line in re.split(r'(?<=[.!?])\s+', line):
                 # check for end of story
                 if END_MARKER in output_line.lower():
@@ -92,8 +93,10 @@ class TriadicLLM:
             if finished:
                 break
             filtered.append("") # empty line between paragraphs
-            
-        if len(filtered) > 0 and len(filtered[-1]) == 0:
+        
+        if not finished or len(filtered) == 0:
+            return []
+        if len(filtered[-1]) == 0:
             filtered.pop(-1)
         print(f"{prefix}. {' '.join(filtered)}")
         return filtered
