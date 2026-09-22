@@ -29,11 +29,12 @@ class NeuralNetwork(nn.Module):
         h = F.silu(self.fc2(h))
 
         # R-gate + R-skip block
+        activation = self.act if self.act else F.silu
         for _ in range(3):
             # gate ∈ (0,1)
             g = torch.sigmoid(self.fc_gate(h))
             # recursive update
-            u = F.silu(self.fc3(h))
+            u = activation(self.fc3(h))
             # gated residual: h ← h + g·(u−h)
             h = h + g * (u - h)
 

@@ -5,7 +5,7 @@ from dmlg import WriterParams
 import time
 
 MODEL = "mars"
-PREFIXES = ["300k"]
+PREFIXES = ["base_mlp"]
 
 NUM_LINES = 3000
 NUM_STORIES = 1

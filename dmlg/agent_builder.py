@@ -146,3 +146,7 @@ class AgentBuilder:
         
         agent.train_curriculum(combined_curriculum, random_epochs)        
         agent.save(self.model_filename(environment))
+
+        # Plot learned activation function
+        if agent.glp_network.glp_network.act:
+            agent.glp_network.glp_network.act.f.plot()

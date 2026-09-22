@@ -3,17 +3,16 @@ from engine.triadic_trainer import TriadicTrainer
 import time
 
 MODEL = "mars"
-VARIANTS = [300]
+EPOCHS = [5000]
+PREFIXES = ["base_mlp"]
 
 # Training a dataset model with epoch variants
 trainer: TriadicTrainer = TriadicTrainer()
 
-for variant in VARIANTS:
+for index in range(len(PREFIXES)):
     start = time.perf_counter()
 
-    prefix = f"{variant}k"
-    train_epochs = variant * 1000
-
-    trainer.train(MODEL, prefix, train_epochs)
+    prefix = PREFIXES[index]
+    trainer.train(MODEL, prefix, EPOCHS[index])
 
     print(f"Training time {prefix}: {time.perf_counter() - start:.1f} s")

@@ -68,6 +68,10 @@ from .training import (
 
 # --- Neural / Network -----------------------------------------------------
 
+from .activation import ActivationMLP, AMLPActivation
+
+# --- Neural / Network -----------------------------------------------------
+
 from .neural import NeuralNetwork
 from .glp_network import (
     GlpNetwork,
@@ -114,6 +118,10 @@ __all__ = [
     "Curriculum",
     "CurriculumStory",
     "CurriculumSentence",
+
+    # Activation
+    "ActivationMLP",
+    "AMLPActivation"
 
     # Neural / Network
     "NeuralNetwork",
