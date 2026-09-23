@@ -33,6 +33,7 @@ class WriterParams:
     min_lines_paragraph: int = 3
     min_words: int = 8
     max_words: int = 30
+    max_chapters: int = 1000
     from_line_fraction: float = 0.0
     to_line_fraction: float = 1.0
     prompt: List[str] = None

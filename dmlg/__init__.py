@@ -66,9 +66,9 @@ from .training import (
     TrainingBatch
 )
 
-# --- Neural / Network -----------------------------------------------------
+# --- Bias Network -----------------------------------------------------
 
-from .activation import ActivationMLP, AMLPActivation
+from .bias import BiasMLP, AMLPBias
 
 # --- Neural / Network -----------------------------------------------------
 
@@ -119,9 +119,9 @@ __all__ = [
     "CurriculumStory",
     "CurriculumSentence",
 
-    # Activation
-    "ActivationMLP",
-    "AMLPActivation"
+    # Bias
+    "BiasMLP",
+    "AMLPBias"
 
     # Neural / Network
     "NeuralNetwork",

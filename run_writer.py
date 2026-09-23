@@ -5,9 +5,10 @@ from dmlg import WriterParams
 import time
 
 MODEL = "mars"
-PREFIXES = ["base_mlp"]
+PREFIXES = ["base_bias"]
 
 NUM_LINES = 3000
+MAX_CHAPTERS = 10000
 NUM_STORIES = 1
 BEAM_SEARCH = False
 KEYWORDS = {}
@@ -27,6 +28,7 @@ for prefix in PREFIXES:
     params: WriterParams = WriterParams(
         amount = NUM_STORIES,
         lines = NUM_LINES,
+        max_chapters = MAX_CHAPTERS,
         prompt = HONEYMOON_PROMPT,
         keywords = KEYWORDS,
         beam_search = BEAM_SEARCH)

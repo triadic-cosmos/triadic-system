@@ -348,6 +348,7 @@ class WriterAgent:
         params: WriterParams
     ) -> WriterStory:
 
+        chapters: int = 0
         line_nr: int = 0
         lines: int = params.lines
         chapter_lines = 0
@@ -425,6 +426,9 @@ class WriterAgent:
             if sentence.tokens[0].text == Token.SOC.text:
                 chapter_lines = 0
                 paragraph_lines = 0
+                chapters += 1
+                if chapters >= params.max_chapters:
+                    break
             elif sentence.tokens[0].text == Token.SOP.text:
                 chapter_lines += 1
                 paragraph_lines = 0

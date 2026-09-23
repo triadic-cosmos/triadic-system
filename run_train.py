@@ -3,8 +3,8 @@ from engine.triadic_trainer import TriadicTrainer
 import time
 
 MODEL = "mars"
-EPOCHS = [5000]
-PREFIXES = ["base_mlp"]
+EPOCHS = [100000]
+PREFIXES = ["base_bias"]
 
 # Training a dataset model with epoch variants
 trainer: TriadicTrainer = TriadicTrainer()
