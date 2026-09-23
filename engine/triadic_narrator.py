@@ -120,12 +120,14 @@ class TriadicNarrator:
                 chapter = chapters[index]
                  
                 # Moderate chapter
+                moderation_success = False
                 chapter.moderated_sentences = chapter.original_sentences
                 for t in range(self.params.max_retries):
                     moderated = self.llm.moderate(FIX_PROMPT, f"CHAPTER-{chapter_nr}",
                         chapter.original_sentences, self.params.max_tokens)
                     if len(moderated) >= self.params.min_chapter_sentences:
                         chapter.moderated_sentences = moderated
+                        moderation_success = True
                         break
                                  
                 # Determine a title for chapter
@@ -135,6 +137,8 @@ class TriadicNarrator:
                     chapter.title = title
                     if title != "Untitled":
                         break
+                if chapter.title == "Untitled" and moderation_success:
+                    continue # full retry of chapter when the moderation succeeded
                                                   
                 # Determine a score for moderated chapter
                 for t in range(self.params.max_retries):
@@ -142,8 +146,8 @@ class TriadicNarrator:
                     chapter.moderated_score = score
                     if score > 0:
                         break
-                if chapter.moderated_score < self.params.min_score:
-                    continue # full retry of chapter
+                if chapter.moderated_score < self.params.min_score and moderation_success:
+                    continue # full retry of chapter when the moderation succeeded
 
                 # Determine transition to previous chapter without retries
                 transition = []
@@ -160,8 +164,12 @@ class TriadicNarrator:
         
                 # Write chapter to output file
                 output_file.write(f"% {'-' * 50}\n")
-                output_file.write(f"% CHAPTER {chapter_nr} : SCORE = {chapter.moderated_score}\n")
-                output_file.write(f"% {'-' * 50}\n")                
+                if moderation_success:
+                    output_file.write("% CHAPTER")
+                else:
+                    output_file.write("% ORIGINAL CHAPTER")                
+                output_file.write(f" {chapter_nr} : SCORE = {chapter.moderated_score}\n")
+                output_file.write(f"% {'-' * 50}\n")
                 output_file.write(f"\chapter{{{chapter.title}}}\n\n")
                 for line in chapter.moderated_sentences:
                     output_file.write(line + "\n")

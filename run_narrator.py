@@ -3,7 +3,7 @@ from engine.triadic_narrator import TriadicNarrator, TriadicNarratorParams
 from engine.triadic_llm import TriadicLLM
 
 DATA_FOLDER = "../triadic-data/toy-system/toy-system-v9/mars"
-PREFIXES = ["xl", "xxl_micro", "large1", "base1", "small", "micro", "tiny"]
+PREFIXES = ["large1", "base1", "small", "micro", "tiny"]
 
 # Main
 llm: TriadicLLM = TriadicLLM()
