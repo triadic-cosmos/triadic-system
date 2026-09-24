@@ -192,7 +192,7 @@ class GlpNetwork:
         lemma_pred = F.normalize(pred, p=2, dim=0)
 
         # Determine incompatible tokens
-        min_tokens = self.configuration.min_words * 2
+        min_tokens = params.min_words * 2
         incompatible_grammar = RULE_BASED.determine_incompatible_grammar(model_input, min_tokens)
         incompatible_lemma = RULE_BASED.determine_incompatible_lemma(model_input)
 

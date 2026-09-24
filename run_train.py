@@ -4,7 +4,7 @@ import time
 
 MODEL = "mars"
 EPOCHS = [100000]
-PREFIXES = ["base_bias"]
+PREFIXES = ["bias"]
 
 # Training a dataset model with epoch variants
 trainer: TriadicTrainer = TriadicTrainer()

@@ -21,7 +21,18 @@ class NeuralNetwork(nn.Module):
         self.fc_gate = nn.Linear(other_hidden_size, other_hidden_size)
 
         self.opt = torch.optim.Adam(self.parameters(), lr=1e-3)
+        
+        self.initialize_bias()
 
+    # Check for bias
+    def initialize_bias(self):
+        if hasattr(self, "bias"):
+            if self.bias:
+                print("Bias present!")
+        else:
+            self.bias = None
+            print("No bias present.")
+        
     # r-skip + r-gate hybrid forward
     def forward(self, x):
         # initial projection

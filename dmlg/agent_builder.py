@@ -147,6 +147,5 @@ class AgentBuilder:
         agent.train_curriculum(combined_curriculum, random_epochs)        
         agent.save(self.model_filename(environment))
 
-        # Plot the trained bias function
-        if agent.glp_network.glp_network.bias:
-            agent.glp_network.glp_network.bias.bias_mlp.plot()
+        # Plot the trained bias function if present
+        agent.plot_bias()

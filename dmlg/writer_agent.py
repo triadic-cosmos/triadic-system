@@ -13,6 +13,7 @@ from .tokens import Token, TokenDictionary, TokenLogit
 from .context import ContextWindow, ModelInput
 from .glp_network import GlpNetwork, TrainingBatch
 from .curriculum import Curriculum, CurriculumSentence
+from .bias import BiasMLP, AMLPBias
 
 GRAMMAR_CHECK = False
     
@@ -45,6 +46,15 @@ class WriterAgent:
     # ------------------------------------------------------------
     # Learning and curriculum training
     # ------------------------------------------------------------
+
+    def add_bias(self, hidden_size, epochs: int):
+        bias: BiasMLP = BiasMLP(self.configuration.other_hidden_size, hidden_size)
+        bias.pretrain(epochs)
+        self.glp_network.glp_network.bias = AMLPBias(bias)
+        
+    def plot_bias(self):
+        if self.glp_network.glp_network.bias:
+            self.glp_network.glp_network.bias.bias_mlp.plot()
 
     def learn_batch(self, epoch: int, batch: TrainingBatch) -> TrainingBatch:
         if batch.has_samples():
@@ -109,6 +119,8 @@ class WriterAgent:
         agent.token_dictionary = state["token_dictionary"]
         agent.glp_network = state["glp_network"]
         agent.training_count = state["training_count"]
+        
+        agent.glp_network.glp_network.initialize_bias()
         
         print(f"Loaded agent {agent.id}.")
         agent.show(True)
@@ -372,7 +384,7 @@ class WriterAgent:
 
         print("> generating", end=" ")
 
-        beam_attempts = self.configuration.beam_attempts
+        beam_attempts = params.beam_attempts
 
         # 3. Generate story line per line
         for _ in range(params.max_attempts):
@@ -436,7 +448,7 @@ class WriterAgent:
                 chapter_lines += 1
                 paragraph_lines += 1
 
-            beam_attempts = self.configuration.beam_attempts
+            beam_attempts = params.beam_attempts
 
         print("done")
 
