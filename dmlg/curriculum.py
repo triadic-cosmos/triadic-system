@@ -11,6 +11,8 @@ from .grammar import GrammarEngine
 from .config import Configuration
 from .writer_environment import WriterEnvironment
 
+VERBOSE = False
+
 @dataclass
 class CurriculumSentence:
     tokens: List[Token]
@@ -48,7 +50,8 @@ class Curriculum:
             tokens = [self.token_dictionary.add_and_get(t) for t in eol.split(" ") if t != ""]
             natural = environment.grammar.convert_from_canonical(eol)
             self.sentences.append(CurriculumSentence(tokens, natural))
-            print(f"{i}. {natural}")
+            if VERBOSE:
+                print(f"{i}. {natural}")
             i += 1
             if len(self.sentences) >= environment.configuration.max_sentences:
                 break
@@ -57,6 +60,7 @@ class Curriculum:
         with open(filename, "r", encoding='utf-8-sig') as f:
             lines = f.read().splitlines()
 
+        chapter_nr = 1
         sentences = []
         start_token = "<SOC> "
 
@@ -77,10 +81,11 @@ class Curriculum:
             
             for sent in doc.sents:
                 source = sent.text.rstrip().lstrip()
-                if is_all_caps_title(source):
+                if is_chapter_title(source):
                     # this is likely a chapter title
-                    print(f"CHAPTER = |{source}|")
+                    print(f"CHAPTER {chapter_nr} = |{source}|")
                     start_token = "<SOC> "
+                    chapter_nr += 1
                     continue 
                 canonical = environment.grammar.convert_to_canonical(source)
                 natural = environment.grammar.convert_from_canonical(canonical)
@@ -117,7 +122,9 @@ class Curriculum:
     
             print(f"curriculum sentences = {len(self.sentences)}")
 
-def is_all_caps_title(s: str) -> bool:
+def is_chapter_title(s: str) -> bool:
+    if s.lower().startswith("chapter"):
+        return True
     return len(s) > 2 and any(c.isupper() for c in s) and not any(c.islower() for c in s)
 
 def preprocess_line(line: str) -> str:

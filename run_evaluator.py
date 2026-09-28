@@ -4,11 +4,13 @@
 from engine.triadic_llm import TriadicLLM
 from engine.triadic_evaluator import TriadicEvaluator
 
+from dmlg import DATA_FOLDER
+
 import time
 
-DATA_FOLDER = "../triadic-data/toy-system/toy-system-v9/mars/"
-EVALUATION_FOLDER = DATA_FOLDER + "output"
-OUTPUT_FILENAME = DATA_FOLDER + "eval.txt"
+DATASET_FOLDER = DATA_FOLDER + "alice/"
+EVALUATION_FOLDER = DATASET_FOLDER + "output"
+OUTPUT_FILENAME = DATASET_FOLDER + "eval.txt"
 MIN_LINES = 20
 
 # Main

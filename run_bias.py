@@ -3,8 +3,8 @@ from engine.triadic_writer import TriadicWriter
 
 from dmlg import WriterEnvironment, WriterAgent, AgentBuilder
 
-MODEL_NAME = "mars"
-INPUT_PREFIX = "bias"
+MODEL_NAME = "alice"
+INPUT_PREFIX = "base"
 OUTPUT_PREFIX = "bias"
 HIDDEN_SIZE = 256
 EPOCHS = 2000

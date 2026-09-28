@@ -4,19 +4,16 @@ from dmlg import WriterParams
 
 import time
 
-MODEL = "mars"
+MODEL = "alice"
 PREFIXES = ["base"]
 
-NUM_LINES = 3000
-MAX_CHAPTERS = 10000
-NUM_STORIES = 1
+NUM_LINES = 2000
+MAX_CHAPTERS = 1000
 BEAM_SEARCH = False
 KEYWORDS = {}
 
 # Quotes from original book
-HONEYMOON_PROMPT = [ "Vote for sound men and sound money!" ]
-TIME_PROMPT = [ "That is the germ of my great discovery." ]
-MARS_PROMPT = [ "Tell me, O Thuvia of Ptarth, that I may still hope, that though you do not love me now, yet some day, some day, my princess." ]
+ALICE_PROMPT = ["The rabbit-hole went straight on like a tunnel."]
 
 # Generation main using keywords, prompt and beam search
 start = time.perf_counter()
@@ -26,10 +23,9 @@ print("Generating stories...")
 for prefix in PREFIXES:
     writer: TriadicWriter = TriadicWriter(MODEL, prefix)
     params: WriterParams = WriterParams(
-        amount = NUM_STORIES,
         lines = NUM_LINES,
         max_chapters = MAX_CHAPTERS,
-        prompt = HONEYMOON_PROMPT,
+        prompt = ALICE_PROMPT,
         keywords = KEYWORDS,
         beam_search = BEAM_SEARCH)
     writer.write(params)

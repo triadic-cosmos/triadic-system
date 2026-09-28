@@ -2,11 +2,11 @@ from engine.triadic_trainer import TriadicTrainer
 
 import time
 
-MODEL = "mars"
-OLD_PREFIX = "300k"
+MODEL = "alice"
+OLD_PREFIX = "base"
 NEW_PREFIX = "large"
 NEW_HIDDEN_SIZE = 2048
-EPOCHS = 200000
+EPOCHS = 1000
 
 # Scale and continue training an existing model
 trainer: TriadicTrainer = TriadicTrainer()

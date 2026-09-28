@@ -391,8 +391,8 @@ class WriterAgent:
             ctx.clear_current_sentence()
 
             line_position = [params.from_line_fraction + line_nr * fraction_multiplier]
-            allow_chapter = chapter_lines >= params.min_lines_chapter
             allow_paragraph = paragraph_lines >= params.min_lines_paragraph
+            allow_chapter = chapter_lines >= params.min_lines_chapter and allow_paragraph
             model_input = ModelInput(ctx, line_position, allow_chapter, allow_paragraph)
 
             # --- BEAM SEARCH MODE ---
@@ -439,7 +439,8 @@ class WriterAgent:
                 chapter_lines = 0
                 paragraph_lines = 0
                 chapters += 1
-                if chapters >= params.max_chapters:
+                if chapters >= params.max_chapters or \
+                    line_nr + params.min_lines_chapter > lines:
                     break
             elif sentence.tokens[0].text == Token.SOP.text:
                 chapter_lines += 1
