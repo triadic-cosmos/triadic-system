@@ -5,9 +5,9 @@ from dmlg import WriterEnvironment, WriterAgent, AgentBuilder
 
 MODEL_NAME = "alice"
 INPUT_PREFIX = "base"
-OUTPUT_PREFIX = "bias"
-HIDDEN_SIZE = 256
-EPOCHS = 2000
+OUTPUT_PREFIX = "base"
+HIDDEN_SIZE = 1024
+EPOCHS = 1
 
 # Main
 writer: TriadicWriter = TriadicWriter(MODEL_NAME, INPUT_PREFIX)

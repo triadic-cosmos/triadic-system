@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 from typing import List
 
-from .tokens import Token, HISTORY_TOKENS
+from .tokens import Token, HISTORY_TOKENS, TRACKER_TOKENS
 from .narrative_memory import NarrativeMemory
 from .config import Configuration
 
@@ -91,7 +91,34 @@ class TokenHistory:
         copy = TokenHistory(self.dimension, self.alpha)
         copy.history = self.history.copy()
         return copy
-    
+
+# ============================================================
+# Entity Tracker
+# ============================================================
+
+@dataclass
+class EntityTracker:
+    tracking: dict
+    alpha: float
+ 
+    def __post_init__(self):
+        self.state = [0] * len(self.tracking)
+
+    def get_state(self) -> List[float]:
+        return self.state
+
+    def update_from_sentence(self, tokens: List[Token]):
+        grammar = False
+        self.state = [t * self.alpha for t in self.state]
+        
+        for token in tokens:
+            if token.text in TRACKER_TOKENS:
+                grammar = True
+            elif grammar:
+                grammar = False
+                if token.text in self.tracking:
+                    self.state[self.tracking[token.text]] = 1.0
+                    
 # ============================================================
 # Context Window
 # ============================================================
@@ -100,6 +127,7 @@ class TokenHistory:
 class ContextWindow:
     configuration: Configuration
     lemma_embedding_dict: any
+    tracking: any
     
     def __post_init__(self):
         self._token_histories = []
@@ -112,6 +140,8 @@ class ContextWindow:
 
         self._narrative_memory = NarrativeMemory(self.lemma_embedding_dict, self.configuration)
         self._narrative_memory_embedding = None
+
+        self._entity_tracker = EntityTracker(self.tracking, self.configuration.tracker_alpha)
 
         self._current_tokens = []
         self._current_sentence = CurrentSentence(
@@ -175,6 +205,9 @@ class ContextWindow:
         self._narrative_memory.update_from_sentence(tokens)
         self._narrative_memory_embedding = None
     
+    def update_entity_tracking(self, tokens: List[Token]):
+        self._entity_tracker.update_from_sentence(tokens)
+    
     def copy_current(self) -> "ContextWindow":
         ctx: ContextWindow = ContextWindow(self.configuration, self.lemma_embedding_dict)
 
@@ -200,6 +233,9 @@ class ContextWindow:
         if self._narrative_memory_embedding == None:
             self._narrative_memory_embedding = self._narrative_memory.get_state()
         return self._narrative_memory_embedding
+    
+    def get_entity_tracker_embedding(self) -> List[float]:
+        return self._entity_tracker.get_state()
     
     def get_token_history_embedding(self) -> List[float]:
         embedding = []
@@ -227,12 +263,14 @@ class InputEncoder:
     def encode(self, model_input: ModelInput) -> List[float]:
         current_embedding = model_input.window.get_current_embedding()
         narrative_embedding = model_input.window.get_narrative_memory_embedding()
+        entity_embedding = model_input.window.get_entity_tracker_embedding()
         token_history = model_input.window.get_token_history_embedding()
         line_position = model_input.line_position
 
         return (
             current_embedding
             + narrative_embedding
+            + entity_embedding
             + token_history
             + line_position
         )

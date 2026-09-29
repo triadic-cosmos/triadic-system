@@ -13,10 +13,11 @@ from .tokens import Token, TokenDictionary, TokenLogit
 from .context import ContextWindow, ModelInput
 from .glp_network import GlpNetwork, TrainingBatch
 from .curriculum import Curriculum, CurriculumSentence
+from .entity_tracker import TrackerMap
 from .bias import BiasMLP, AMLPBias
 
 GRAMMAR_CHECK = False
-    
+
 @dataclass
 class WriterAgent:
     environment: WriterEnvironment
@@ -26,6 +27,7 @@ class WriterAgent:
     configuration: Configuration = field(init=False)
     glp_network: GlpNetwork = field(init=False)
     token_dictionary: TokenDictionary = field(init=False)
+    tracking: dict = field(init=False)
 
     training_count: int = 0
 
@@ -41,12 +43,24 @@ class WriterAgent:
         return f"[{self.id}] trainings = {self.training_count}"
 
     def new_context(self) -> ContextWindow:
-        return ContextWindow(self.configuration, self.glp_network.lemma_embedding_dict)
+        return ContextWindow(self.configuration,
+                             self.glp_network.lemma_embedding_dict,
+                             self.tracking)
 
     # ------------------------------------------------------------
     # Learning and curriculum training
     # ------------------------------------------------------------
 
+    def add_tracking(self, curriculums: List[Curriculum]):
+        if hasattr(self, "tracking") and self.tracking:
+            print("Found existing tracking!")
+            return
+        tracking_map = TrackerMap(self.configuration)
+        for curriculum in curriculums:
+            tracking_map.add_entities(curriculum)
+        tracking_map.partition_entities()
+        self.tracking = tracking_map.partitions
+        
     def add_bias(self, hidden_size, epochs: int):
         bias: BiasMLP = BiasMLP(self.configuration.other_hidden_size, hidden_size)
         bias.pretrain(epochs)
@@ -87,6 +101,7 @@ class WriterAgent:
 
     def show(self, full = False):
         print(f"training count = {self.training_count}")
+        print(f"input size = {self.configuration.generator_input_size()}")
         print(f"page count = {len(self.glp_network.page_list)}")
         if full:
             sizes = []
@@ -105,6 +120,7 @@ class WriterAgent:
             "token_dictionary": self.token_dictionary,
             "glp_network": self.glp_network,
             "training_count": self.training_count,
+            "tracking": self.tracking
         }
         with open(path, "wb") as f:
             pickle.dump(state, f)
@@ -119,6 +135,7 @@ class WriterAgent:
         agent.token_dictionary = state["token_dictionary"]
         agent.glp_network = state["glp_network"]
         agent.training_count = state["training_count"]
+        agent.tracking = state["tracking"]
         
         agent.glp_network.glp_network.initialize_bias()
         
@@ -349,6 +366,7 @@ class WriterAgent:
     def update_context_tokens(self, ctx: ContextWindow, tokens: List[Token]):
         ctx.start_sentence()
         ctx.update_narrative_memory(tokens)
+        ctx.update_entity_tracking(tokens)
             
     def update_context(self, ctx: ContextWindow, sentence: WriterSentence):
         self.update_context_tokens(ctx, sentence.tokens)

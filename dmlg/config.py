@@ -9,9 +9,9 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 768
-    other_hidden_size: int = 768
-    lemma_input_dimension: int = 96
+    first_hidden_size: int = 1024
+    other_hidden_size: int = 1024
+    lemma_input_dimension: int = 70
     lemma_output_dimension: int = 128
     total_pages: int = 1000000
     max_page_input_size: int = 1
@@ -21,16 +21,24 @@ class Configuration:
     # ------------------------------------------------------------
     position_divider = 30
     
-    history_size = [8, 16, 32, 48, 64, 80, 96]
-    history_alpha = [0.8, 0.85, 0.9, 0.95, 0.97, 0.98, 0.99]
+    # 30 + 50 + 70 = 150
+    history_size = [30, 50, 70]
+    history_alpha = [0.92, 0.95, 0.98]
     
-    narrative_sentences: int = 20
+    # 5 * 32 = 160
+    narrative_sentences: int = 5
     narrative_state_size: int = 32
     narrative_hidden_size: int = 64
     narrative_token_size: int = 8
     
-    last_embeddings: int = 10
+    # 2 * 14 * 16 + 2 = 450
+    last_embeddings: int = 14
     last_embedding_size: int = 16
+    
+    # 150 + 160 + 450 + 739 + 1 = 1500
+    tracker_entities: int = 739
+    tracker_min: int = 10
+    tracker_alpha: float = 0.98
     
     # ------------------------------------------------------------
     # Curriculum parameters
@@ -65,6 +73,7 @@ class Configuration:
         # line position (1)
         return self.generator_current_context_size() + \
                self.narrative_state_size * self.narrative_sentences + \
+               self.tracker_entities + \
                sum(self.history_size) + 1
 
     def generator_output_size(self) -> int:

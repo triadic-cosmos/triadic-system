@@ -53,6 +53,12 @@ HISTORY_TOKENS = {
     "<ADV>"
 }
 
+TRACKER_TOKENS = {
+    "<NOUN>",
+    "<NOUN-PLURAL>",
+    "<PROPN>"
+}
+
 TERMINAL_TOKENS = {
     "<PERIOD>",
     "<COMMA>",

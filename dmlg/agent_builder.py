@@ -10,7 +10,6 @@ from .semantic import SemanticEngine
 from .config import Configuration
 from .context import ContextWindow
 from .writer_story import WriterParams
-
 from .writer_agent import WriterAgent, ModelInput
 from .writer_environment import WriterEnvironment
 from .curriculum import Curriculum, CurriculumSentence
@@ -30,6 +29,7 @@ class TrainingBatchBuilder:
     def update_context(self, sentence: CurriculumSentence, context: ContextWindow):
         context.start_sentence()
         context.update_narrative_memory(sentence.tokens)
+        context.update_entity_tracking(sentence.tokens)
 
     def build_sentence(self, index: int, sentence: CurriculumSentence, line_position: List[float], context: ContextWindow):
         configuration = self.agent.configuration
@@ -61,7 +61,7 @@ class TrainingBatchBuilder:
             context = self.agent.new_context()
             
             for sentence in curriculum.sentences:
-                line_position = [line / last_line]            
+                line_position = [line / last_line]
                 self.build_sentence(line, sentence, line_position, context)
                 total_samples += len(sentence.batch.samples)
                 line += 1
@@ -140,6 +140,8 @@ class AgentBuilder:
         print(f"random epochs = {random_epochs}")
 
         agent: WriterAgent = self.load_or_create_agent(environment)
+
+        agent.add_tracking(curriculum)
 
         training_builder: TrainingBatchBuilder = TrainingBatchBuilder(agent)
         combined_curriculum: Curriculum = training_builder.build_curriculum(curriculum)

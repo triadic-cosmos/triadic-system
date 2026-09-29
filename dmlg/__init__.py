@@ -1,8 +1,9 @@
 """
 DMLG - Dynamic Modular Language Graph
+GLPG - Grammar Lemma Paged Graph
 Part of the Triadic System (Triadic Cosmos ecosystem)
 
-This package exposes the public API of the DMLG engine.
+This package exposes the public API of the DMLG and GLPG engine.
 Internal modules remain accessible but are not exported by default.
 """
 
@@ -99,11 +100,6 @@ __all__ = [
     "ContextWindow",
     "ModelInput",
     "InputEncoder",
-
-    # Sentence Encoding
-    "SentenceEncoder",
-    "EncodedSentence",
-    "EMPTY_SENTENCE",
 
     # Writer System
     "WriterAgent",
