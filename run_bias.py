@@ -5,8 +5,8 @@ from dmlg import WriterEnvironment, WriterAgent, AgentBuilder
 
 MODEL_NAME = "alice"
 INPUT_PREFIX = "base"
-OUTPUT_PREFIX = "base"
-HIDDEN_SIZE = 1024
+OUTPUT_PREFIX = "bias"
+HIDDEN_SIZE = 1000
 EPOCHS = 1
 
 # Main

@@ -9,8 +9,8 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 1024
-    other_hidden_size: int = 1024
+    first_hidden_size: int = 1000
+    other_hidden_size: int = 1000
     lemma_input_dimension: int = 70
     lemma_output_dimension: int = 128
     total_pages: int = 1000000
@@ -20,24 +20,24 @@ class Configuration:
     # Context parameters
     # ------------------------------------------------------------
     position_divider = 30
+    paragraph_divider = 50
     
-    # 30 + 50 + 70 = 150
-    history_size = [30, 50, 70]
-    history_alpha = [0.92, 0.95, 0.98]
+    # 30 + 40 + 50 + 60 + 70 = 250
+    history_size = [30, 40, 50, 60, 70]
+    history_alpha = [0.91, 0.93, 0.95, 0.97, 0.99]
     
-    # 5 * 32 = 160
-    narrative_sentences: int = 5
+    # 8 * 32 = 256
+    narrative_sentences: int = 8
     narrative_state_size: int = 32
     narrative_hidden_size: int = 64
     narrative_token_size: int = 8
     
-    # 2 * 14 * 16 + 2 = 450
-    last_embeddings: int = 14
+    # 2 * 15 * 16 + 2 = 482
+    last_embeddings: int = 15
     last_embedding_size: int = 16
     
-    # 150 + 160 + 450 + 739 + 1 = 1500
-    tracker_entities: int = 739
-    tracker_min: int = 10
+    # 250 + 256 + 482 + 1010 + 2 = 2000
+    tracker_entities: int = 1010
     tracker_alpha: float = 0.98
     
     # ------------------------------------------------------------
@@ -70,11 +70,11 @@ class Configuration:
         return 2 * self.last_embeddings * self.last_embedding_size + 2
 
     def generator_input_size(self) -> int:
-        # line position (1)
+        # line position (1) + paragraph position (1)
         return self.generator_current_context_size() + \
                self.narrative_state_size * self.narrative_sentences + \
                self.tracker_entities + \
-               sum(self.history_size) + 1
+               sum(self.history_size) + 2
 
     def generator_output_size(self) -> int:
         # lemma embedding

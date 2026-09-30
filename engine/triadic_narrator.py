@@ -40,7 +40,7 @@ class TriadicNarratorParams:
     max_chapters: int = 1000
     min_chapter_sentences: int = 10
     min_transition_sentences: int = 2
-    min_score: int = 80
+    min_score: int = 85
     max_retries: int = 10
     max_tokens: int = 5000
 

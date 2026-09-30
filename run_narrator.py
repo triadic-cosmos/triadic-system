@@ -5,7 +5,7 @@ from engine.triadic_llm import TriadicLLM
 from dmlg import DATA_FOLDER
 
 DATASET_FOLDER = DATA_FOLDER + "alice"
-PREFIXES = []
+PREFIXES = ["base"]
 
 # Main
 llm: TriadicLLM = TriadicLLM()
@@ -15,6 +15,6 @@ for prefix in PREFIXES:
     params: TriadicNarratorParams = TriadicNarratorParams(
         f"{DATASET_FOLDER}/output/{prefix}_output.txt",
         f"{DATASET_FOLDER}/narrator/{prefix}_book.txt",
-        1000)
+        10)
     narrator: TriadicNarrator = TriadicNarrator(llm, params)
     narrator.process_book()

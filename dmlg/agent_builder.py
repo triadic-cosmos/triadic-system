@@ -57,14 +57,19 @@ class TrainingBatchBuilder:
         
         for curriculum in curriculum_list:
             line: int = 0
+            paragraph_line: int = 0
+            paragraph_divider: int = self.agent.configuration.paragraph_divider
             last_line = len(curriculum.sentences) - 1
             context = self.agent.new_context()
             
             for sentence in curriculum.sentences:
-                line_position = [line / last_line]
+                if sentence.starts_paragraph():
+                    paragraph_line = 0
+                line_position = [line / last_line, paragraph_line / paragraph_divider]                                
                 self.build_sentence(line, sentence, line_position, context)
                 total_samples += len(sentence.batch.samples)
                 line += 1
+                paragraph_line += 1
                 combined_curriculum.sentences.append(sentence)
                             
         print(f"Total {total_samples} unique samples in {len(combined_curriculum.sentences)} sentences")
@@ -148,6 +153,3 @@ class AgentBuilder:
         
         agent.train_curriculum(combined_curriculum, random_epochs)        
         agent.save(self.model_filename(environment))
-
-        # Plot the trained bias function if present
-        agent.plot_bias()

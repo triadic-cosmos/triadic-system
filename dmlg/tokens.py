@@ -126,6 +126,9 @@ class Token:
     def is_eol(self) -> bool:
         return self._text == "<EOL>"
 
+    def is_paragraph(self) -> bool:
+        return self._text == "<SOP>"
+
     def is_terminal(self) -> bool:
         return self._text in TERMINAL_TOKENS
 

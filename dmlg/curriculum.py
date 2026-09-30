@@ -18,6 +18,9 @@ class CurriculumSentence:
     tokens: List[Token]
     natural: str
 
+    def starts_paragraph(self) -> bool:
+        return self.tokens[0].is_paragraph()
+
     def get_canonical(self) -> str:
         return " ".join([token.text for token in self.tokens])
 

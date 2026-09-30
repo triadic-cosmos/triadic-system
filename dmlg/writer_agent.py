@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 from typing import List, Set, Dict, Optional
 from collections import defaultdict
+
 import random
 import pickle
 import math
@@ -30,6 +31,7 @@ class WriterAgent:
     tracking: dict = field(init=False)
 
     training_count: int = 0
+    training_epochs: int = 0
 
     def __init__(self, environment: WriterEnvironment, id: str):
         self.environment = environment
@@ -93,6 +95,7 @@ class WriterAgent:
         self.learn_batch(random_epochs + 1, super_batch)
         if epoch % self.configuration.show_epochs_step != 0:
             print(epoch)
+        self.training_epochs += random_epochs
         self.show()
         
     # ------------------------------------------------------------
@@ -100,6 +103,7 @@ class WriterAgent:
     # ------------------------------------------------------------
 
     def show(self, full = False):
+        print(f"training epochs = {self.training_epochs}")
         print(f"training count = {self.training_count}")
         print(f"input size = {self.configuration.generator_input_size()}")
         print(f"page count = {len(self.glp_network.page_list)}")
@@ -120,6 +124,7 @@ class WriterAgent:
             "token_dictionary": self.token_dictionary,
             "glp_network": self.glp_network,
             "training_count": self.training_count,
+            "training_epochs": self.training_epochs,
             "tracking": self.tracking
         }
         with open(path, "wb") as f:
@@ -135,6 +140,7 @@ class WriterAgent:
         agent.token_dictionary = state["token_dictionary"]
         agent.glp_network = state["glp_network"]
         agent.training_count = state["training_count"]
+        agent.training_epochs = state["training_epochs"]
         agent.tracking = state["tracking"]
         
         agent.glp_network.glp_network.initialize_bias()
@@ -383,6 +389,7 @@ class WriterAgent:
         lines: int = params.lines
         chapter_lines = 0
         paragraph_lines = 0
+        paragraph_divider = self.configuration.paragraph_divider
         fraction_multiplier: float = (params.to_line_fraction - params.from_line_fraction) / (lines - 1)
 
         # 1. Prompt injection
@@ -408,7 +415,7 @@ class WriterAgent:
         for _ in range(params.max_attempts):
             ctx.clear_current_sentence()
 
-            line_position = [params.from_line_fraction + line_nr * fraction_multiplier]
+            line_position = [params.from_line_fraction + line_nr * fraction_multiplier, paragraph_lines / paragraph_divider]
             allow_paragraph = paragraph_lines >= params.min_lines_paragraph
             allow_chapter = chapter_lines >= params.min_lines_chapter and allow_paragraph
             model_input = ModelInput(ctx, line_position, allow_chapter, allow_paragraph)
