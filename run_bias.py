@@ -7,7 +7,7 @@ MODEL_NAME = "alice"
 INPUT_PREFIX = "base"
 OUTPUT_PREFIX = "bias"
 HIDDEN_SIZE = 1000
-EPOCHS = 1
+EPOCHS = 2000
 
 # Main
 writer: TriadicWriter = TriadicWriter(MODEL_NAME, INPUT_PREFIX)

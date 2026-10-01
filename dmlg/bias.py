@@ -11,7 +11,7 @@ class BiasMLP(nn.Module):
         self.h_size = h_size
         self.hidden = hidden
 
-        # Klein modulatie-MLP
+        # Small modulation MLP
         self.fc1 = nn.Linear(h_size, hidden)
         self.fc2 = nn.Linear(hidden, h_size)
 
@@ -44,6 +44,43 @@ class BiasMLP(nn.Module):
 
             if epoch % 200 == 0:
                 print(f"[BiasMLP Pretrain] epoch={epoch}, loss={loss.item():.6f}")
+
+    # ---------------------------------------------------------
+    # PRETRAIN: learn smooth sinusoidal modulation
+    # ---------------------------------------------------------
+    def pretrain_sinus(self, epochs=2000, lr=1e-3,
+                       amplitude=0.5, frequency=0.02, offset=0.5):
+        """
+        Train the bias MLP to approximate a smooth sinusoidal modulation
+        b(h) = offset + amplitude * sin(frequency * ||h||)
+
+        amplitude: max deviation from offset
+        frequency: how fast the sinus oscillates
+        offset: baseline modulation level
+        """
+
+        opt = torch.optim.Adam(self.parameters(), lr=lr)
+
+        # random hidden states
+        x_pre = torch.randn(20000, self.h_size)
+
+        # compute target sinusoidal modulation
+        with torch.no_grad():
+            norms = x_pre.norm(dim=1)  # (batch,)
+            sinus = offset + amplitude * torch.sin(frequency * norms)
+            y_true = sinus.unsqueeze(1).repeat(1, self.h_size)
+
+        for epoch in range(epochs):
+            opt.zero_grad()
+
+            y_pred = self(x_pre)
+
+            loss = F.mse_loss(y_pred, y_true)
+            loss.backward()
+            opt.step()
+
+            if epoch % 200 == 0:
+                print(f"[BiasMLP Sinus Pretrain] epoch={epoch}, loss={loss.item():.6f}")
 
     # ---------------------------------------------------------
     # PLOT: bias-norm vs input-norm

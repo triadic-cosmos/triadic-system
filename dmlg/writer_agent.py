@@ -65,7 +65,7 @@ class WriterAgent:
         
     def add_bias(self, hidden_size, epochs: int):
         bias: BiasMLP = BiasMLP(self.configuration.other_hidden_size, hidden_size)
-        bias.pretrain(epochs)
+        bias.pretrain_sinus(epochs)
         self.glp_network.glp_network.bias = AMLPBias(bias)
         
     def plot_bias(self):
