@@ -73,11 +73,23 @@ class TriadicEvaluator:
 
         with open(evaluation_filename, "w", encoding="utf-8-sig") as evaluation_file:
             chapter_nr: int = 1
+            total_sentences = 0
+            total_min_score = 0
+            total_max_score = 0
+            total_score = 0
+
             for chapter in chapters:
                 self.evaluate_chapter(chapter)
+                total_sentences += len(chapter.sentences)
+                total_min_score += chapter.min_score
+                total_max_score += chapter.max_score
+                total_score += chapter.score                
                 evaluation_file.write(f"{chapter_nr};{len(chapter.sentences)};{chapter.min_score};{chapter.max_score};{chapter.score}\n")
                 evaluation_file.flush()
                 chapter_nr += 1
+            
+            size = len(chapters)
+            evaluation_file.write(f"AVG;{total_sentences/size:.1f};{total_min_score/size:.1f};{total_max_score/size:.1f};{total_score/size:.1f}\n")
 
 def create_chapter(sentences: List[str]) -> EvaluatorChapter:
     if len(sentences[0]) < 5:
