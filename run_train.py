@@ -4,8 +4,8 @@ import time
 
 MODEL = "alice"
 EPOCHS = [10000]
-MAX_EPOCHS = 300000
-PREFIXES = ["base"]
+MAX_EPOCHS = 200000
+PREFIXES = ["bias"]
 
 # Training a dataset model with epoch variants
 trainer: TriadicTrainer = TriadicTrainer()

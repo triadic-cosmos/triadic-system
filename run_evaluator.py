@@ -1,5 +1,3 @@
-# NOT YET UPDATED TO LATEST!
-
 # Output evaluator runner
 from engine.triadic_llm import TriadicLLM
 from engine.triadic_evaluator import TriadicEvaluator
@@ -8,15 +6,15 @@ from dmlg import DATA_FOLDER
 
 import time
 
+BOOK_PREFIX = "base"
 DATASET_FOLDER = DATA_FOLDER + "alice/"
-EVALUATION_FOLDER = DATASET_FOLDER + "output"
-OUTPUT_FILENAME = DATASET_FOLDER + "eval.txt"
-MIN_LINES = 20
+BOOK_FILENAME = DATASET_FOLDER + "output/" + BOOK_PREFIX + "_output.txt"
+EVALUATION_FILENAME = DATASET_FOLDER + "evaluation/" + BOOK_PREFIX + "_evaluation.txt"
 
 # Main
 llm: TriadicLLM = TriadicLLM()
-evaluator: TriadicEvaluator = TriadicEvaluator(llm, MIN_LINES)
+evaluator: TriadicEvaluator = TriadicEvaluator(llm)
 
 start = time.perf_counter()
-evaluator.evaluate_folder(EVALUATION_FOLDER, OUTPUT_FILENAME)
+evaluator.evaluate_book(BOOK_FILENAME, EVALUATION_FILENAME)
 print(f"Evaluation time : {time.perf_counter() - start:.1f} s")
