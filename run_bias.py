@@ -6,7 +6,7 @@ from dmlg import WriterEnvironment, WriterAgent, AgentBuilder
 MODEL_NAME = "alice"
 INPUT_PREFIX = "base"
 OUTPUT_PREFIX = "bias"
-HIDDEN_SIZE = 1000
+HIDDEN_SIZE = 768
 EPOCHS = 2000
 
 # Main

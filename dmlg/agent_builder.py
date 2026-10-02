@@ -138,11 +138,12 @@ class AgentBuilder:
         environment = WriterEnvironment(configuration, self.grammar, self.semantic, prefix)
         return environment
     
-    def train_agent(self, environment: WriterEnvironment, curriculum: List[Curriculum]):
+    def train_agent(self, environment: WriterEnvironment, curriculum: List[Curriculum], max_epochs: int = 0):
         print("Training agent from curriculum...")
         
         random_epochs = environment.configuration.random_epochs
-        print(f"random epochs = {random_epochs}")
+        print(f"random epochs per iteration = {random_epochs}")
+        print(f"maximum epochs = {max_epochs}")
 
         agent: WriterAgent = self.load_or_create_agent(environment)
 
@@ -150,6 +151,13 @@ class AgentBuilder:
 
         training_builder: TrainingBatchBuilder = TrainingBatchBuilder(agent)
         combined_curriculum: Curriculum = training_builder.build_curriculum(curriculum)
-        
-        agent.train_curriculum(combined_curriculum, random_epochs)        
-        agent.save(self.model_filename(environment))
+
+        iteration: int = 0
+        while iteration < 1 or max_epochs > 0:
+            if max_epochs > 0 and agent.training_epochs >= max_epochs:
+                print("Maximum training epochs reached!")
+                break
+            iteration += 1
+            print(f"Training iteration {iteration}")
+            agent.train_curriculum(combined_curriculum, random_epochs)        
+            agent.save(self.model_filename(environment))

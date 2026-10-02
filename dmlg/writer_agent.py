@@ -464,8 +464,11 @@ class WriterAgent:
                 chapter_lines = 0
                 paragraph_lines = 0
                 chapters += 1
-                if chapters >= params.max_chapters or \
-                    line_nr + params.min_lines_chapter > lines:
+                if line_nr + params.min_lines_chapter > lines:
+                    # remove the new chapter
+                    writer_sentences.pop()
+                    break
+                if chapters >= params.max_chapters: 
                     break
             elif sentence.tokens[0].text == Token.SOP.text:
                 chapter_lines += 1

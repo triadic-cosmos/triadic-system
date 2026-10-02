@@ -5,7 +5,7 @@ from dmlg import WriterParams
 import time
 
 MODEL = "alice"
-PREFIXES = ["bias"]
+PREFIXES = ["base"]
 
 NUM_LINES = 2000
 MAX_CHAPTERS = 1000

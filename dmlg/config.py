@@ -9,8 +9,8 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 1000
-    other_hidden_size: int = 1000
+    first_hidden_size: int = 768
+    other_hidden_size: int = 768
     lemma_input_dimension: int = 70
     lemma_output_dimension: int = 128
     total_pages: int = 1000000
