@@ -17,6 +17,10 @@ TEMPERATURE = 0.9
 TOP_P = 0.9
 END_MARKER = "the end"
 
+BOOK_TITLE_PROMPT = \
+    "Create a nice and fitting book title for the following book chapter titles. " + \
+    "Start with 'Title: ' followed by the book title. " + \
+    "Stop after that. These are all the chapter titles, separated by semicolumns: "
 TITLE_PROMPT = \
     "Create a nice chapter title for the following book chapter. " + \
     "Start with 'Chapter: ' followed by the chapter title. " + \
@@ -46,6 +50,16 @@ class TriadicLLM:
             max_time=90.0,
             repetition_penalty=1.1) 
         return self.tokenizer.decode(output[0], skip_special_tokens=True)
+
+    def generate_book_title(self, titles: List[str], max_tokens: int, title_prompt: str = BOOK_TITLE_PROMPT) -> str:
+        prompt = title_prompt + ";".join(titles)
+        answer = self.generate(prompt, max_tokens)
+        for line in answer.split("\n"):
+            if line.startswith("Title:"):
+                return line.replace("Title:", "").lstrip().rstrip()
+        
+        # Fallback book title
+        return "Untitled"       
 
     def generate_title(self, lines: List[str], max_tokens: int, title_prompt: str = TITLE_PROMPT) -> str:
         # Try with all lines
