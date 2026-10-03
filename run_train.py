@@ -4,7 +4,7 @@ import time
 
 MODEL = "alice"
 EPOCHS = [10000]
-MAX_EPOCHS = 200000
+MAX_EPOCHS = 400000
 PREFIXES = ["bias"]
 
 # Training a dataset model with epoch variants
