@@ -40,6 +40,7 @@ class TriadicNarratorParams:
     max_chapters: int = 1000
     min_chapter_sentences: int = 10
     min_transition_sentences: int = 2
+    max_transition_sentences: int = 15
     min_score: int = 85
     max_retries: int = 15
     max_tokens: int = 5000
@@ -154,6 +155,8 @@ class TriadicNarrator:
                 if previous_chapter:                       
                     transition = self.bridge_chapters(previous_chapter, chapter)
                     if len(transition) >= self.params.min_transition_sentences and \
+                       len(transition) <= self.params.max_transition_sentences and \
+                       transition[-1] != chapter.moderated_sentences[-1] and \
                         check_no_repetition(transition):
                         output_file.write("% TRANSITION\n")
                         for line in transition:
