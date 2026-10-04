@@ -2,10 +2,10 @@ from engine.triadic_trainer import TriadicTrainer
 
 import time
 
-MODEL = "alice"
+MODEL = "alice-distilled"
 EPOCHS = [10000]
-MAX_EPOCHS = 400000
-PREFIXES = ["bias"]
+MAX_EPOCHS = 500000
+PREFIXES = ["base"]
 
 # Training a dataset model with epoch variants
 trainer: TriadicTrainer = TriadicTrainer()

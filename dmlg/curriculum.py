@@ -69,6 +69,9 @@ class Curriculum:
 
         for line in lines:
             line = preprocess_line(line)
+            if line.startswith("%"):
+                # ignore comments
+                continue
             if len(line) < 5:
                 if not start_token:
                     start_token = "<SOP> "
@@ -126,7 +129,7 @@ class Curriculum:
             print(f"curriculum sentences = {len(self.sentences)}")
 
 def is_chapter_title(s: str) -> bool:
-    if s.lower().startswith("chapter"):
+    if s.lower().startswith("chapter") or s.startswith("\\chapter"):
         return True
     return len(s) > 2 and any(c.isupper() for c in s) and not any(c.islower() for c in s)
 
