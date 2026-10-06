@@ -117,6 +117,9 @@ class AgentBuilder:
         folder_filename = self.curriculum_folder_filename(environment, name)
         files = [join(folder_filename, f) for f in listdir(folder_filename)]
         book_files = [f for f in files if isfile(f) and f.endswith(".txt") and not "_tokens" in f]
+        # original book files are not present, use the tokenized versions
+        if len(book_files) == 0:
+            book_files = [f.replace("_tokens", "") for f in files if isfile(f) and f.endswith(".txt") and "_tokens" in f]                        
         print(f"curriculum files = {len(book_files)}")
 
         curriculum_list = []
