@@ -159,6 +159,12 @@ class WriterAgent:
         if not outputs:
             return None
 
+        # filtered output with blacklisted lemma list
+        if params.lemma_blacklist:
+            outputs = [o for o in outputs if o.lemma.text not in params.lemma_blacklist]
+            if len(outputs) == 0:
+                return None
+
         # top-k pairs
         top_k = params.top_k
         candidates = outputs[:top_k]
