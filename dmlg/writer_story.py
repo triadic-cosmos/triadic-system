@@ -20,6 +20,21 @@ class WriterStory:
     def get_story(self) -> str:
         joined = " ".join([sentence.fixed for sentence in self.sentences])
         return joined
+    
+    def to_natural(self) -> List[str]:
+        result = []
+        indent = True
+        for sentence in self.sentences:
+            line = sentence.fixed
+            if line[0] == '$' or line[0] == '#':
+                line = line[2:]
+                indent = True
+            if indent:
+                result.append("\t" + line)
+                indent = False
+            else:
+                result.append(line)
+        return result
 
 # ------------------------------------------------------------
 # Generation parameters
@@ -29,7 +44,7 @@ class WriterStory:
 class WriterParams:
     amount: int = 1 # number of books
     lines: int = 1000 # lines per book
-    min_lines_chapter: int = 20 # minumum lines per chapter
+    min_lines_chapter: int = 20 # minimum lines per chapter
     min_lines_paragraph: int = 3 # minimum lines per paragraph
     min_words: int = 8 # minimum words per sentence
     max_words: int = 30 # maximum words per sentence

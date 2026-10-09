@@ -4,9 +4,10 @@ from engine.triadic_titler import TriadicTitler
 
 from dmlg import DATA_FOLDER
 
-BOOK_PREFIX = "bias-5"
-DATASET_NAME = "alice"
-BOOK_FILENAME = DATA_FOLDER + DATASET_NAME + "/narrator/" + BOOK_PREFIX + "_book.txt"
+BOOK_PREFIX = "base3"
+DATASET_NAME = "alice-hyde-meta"
+EXTRA = "_iter"
+BOOK_FILENAME = DATA_FOLDER + DATASET_NAME + "/narrator/" + BOOK_PREFIX + EXTRA + "_book.txt"
 TITLES = 5
 
 # Main

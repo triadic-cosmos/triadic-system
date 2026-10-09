@@ -2,9 +2,9 @@ from engine.triadic_trainer import TriadicTrainer
 
 import time
 
-MODEL = "alice-distilled"
+MODEL = "alice-hyde-meta"
 EPOCHS = [10000]
-MAX_EPOCHS = 500000
+MAX_EPOCHS = 400000
 PREFIXES = ["base"]
 
 # Training a dataset model with epoch variants

@@ -115,8 +115,7 @@ class TriadicLLM:
         print(f"{prefix}. {' '.join(filtered)}")
         return filtered
     
-    def score(self, lines: List[str], title: str, max_tokens: int, score_prompt: str = SCORE_PROMPT) -> int:
-        prompt = score_prompt.replace("$TITLE", title).replace("$STORY", " ".join(lines))
+    def score_prompt(self, prompt: str, max_tokens: int) -> int:
         answer = self.generate(prompt, max_tokens)
         print(answer)
         for line in answer.split("\n"):
@@ -124,6 +123,10 @@ class TriadicLLM:
             if score:
                 return score
         return 0
+            
+    def score(self, lines: List[str], title: str, max_tokens: int, score_prompt: str = SCORE_PROMPT) -> int:
+        prompt = score_prompt.replace("$TITLE", title).replace("$STORY", " ".join(lines))
+        return self.score_prompt(prompt, max_tokens)
 
 def clean_line(line:str) -> str:
     return line.lstrip().rstrip().replace("Dr.", "Dr").replace("Mr.", "Mr")

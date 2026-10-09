@@ -383,6 +383,48 @@ class WriterAgent:
     def update_context(self, ctx: ContextWindow, sentence: WriterSentence):
         self.update_context_tokens(ctx, sentence.tokens)
 
+    def write_chapter(self, line_nr: int, max_lines: int, ctx: ContextWindow, params: WriterParams) -> WriterStory:
+        chapter_lines = 0
+        paragraph_lines = 0
+        paragraph_divider = self.configuration.paragraph_divider
+        fraction_multiplier: float = (params.to_line_fraction - params.from_line_fraction) / (params.lines - 1)
+        sentences = []
+        writer_sentences = []
+
+        for _ in range(params.max_attempts):
+            # Initialize model input
+            ctx.clear_current_sentence()            
+            line_position = [params.from_line_fraction + line_nr * fraction_multiplier, paragraph_lines / paragraph_divider]
+            allow_paragraph = paragraph_lines >= params.min_lines_paragraph
+            allow_chapter = chapter_lines >= params.min_lines_chapter and allow_paragraph
+            model_input = ModelInput(ctx, line_position, allow_chapter, allow_paragraph)
+            
+            # Generate next sentence
+            sentence = self.generate_sentence(params, model_input, sentences)
+            if not sentence:
+                continue
+            if sentence.tokens[0].text == Token.SOC.text:
+                # Next chapter is reached
+                break            
+            sentences.append(sentence.natural)
+            writer_sentences.append(sentence)
+            self.update_context(ctx, sentence)
+            if len(sentences) >= max_lines:
+                break
+
+            # Update the line number
+            line_nr += 1
+            if sentence.tokens[0].text == Token.SOP.text:
+                chapter_lines += 1
+                paragraph_lines = 0
+            else:
+                chapter_lines += 1
+                paragraph_lines += 1
+            
+        story = WriterStory(writer_sentences)
+        self.fix_story(story)
+        return story
+
     def write_story(
         self,
         prefix: str,

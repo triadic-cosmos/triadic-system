@@ -60,7 +60,7 @@ class CurrentSentence:
         return self.grammar + self.lemma + [self.punctuation] + [cur_pos]
     
     def copy(self) -> "CurrentSentence":
-        copy = CurrentSentence(self.lemma_embedding_dict, self.amount, self.size, self.divider)
+        copy = CurrentSentence(self.lemma_embedding_dict, self.divider, self.amount, self.size)
         copy.grammar = self.grammar.copy()
         copy.lemma = self.lemma.copy()
         copy.position = self.position
@@ -118,7 +118,12 @@ class EntityTracker:
                 grammar = False
                 if token.text in self.tracking:
                     self.state[self.tracking[token.text]] = 1.0
-                    
+     
+    def copy(self) -> "EntityTracker":
+        copy = EntityTracker(self.tracking, self.alpha)
+        copy.state = self.state.copy()
+        return copy
+     
 # ============================================================
 # Context Window
 # ============================================================
@@ -209,7 +214,7 @@ class ContextWindow:
         self._entity_tracker.update_from_sentence(tokens)
     
     def copy_current(self) -> "ContextWindow":
-        ctx: ContextWindow = ContextWindow(self.configuration, self.lemma_embedding_dict)
+        ctx: ContextWindow = ContextWindow(self.configuration, self.lemma_embedding_dict, self.tracking)
 
         for i in range(len(self._token_histories)):
             ctx._token_histories[i] = self._token_histories[i].copy()
@@ -220,6 +225,12 @@ class ContextWindow:
         ctx._last_token = self._last_token
         ctx._forelast_token = self._forelast_token
         ctx._last_lemma = self._last_lemma
+        return ctx
+    
+    def copy_full(self) -> "ContextWindow":
+        ctx = self.copy_current()
+        ctx._entity_tracker = self._entity_tracker.copy()
+        ctx._narrative_memory = self._narrative_memory.copy()
         return ctx
     
     @property

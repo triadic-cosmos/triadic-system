@@ -17,12 +17,15 @@ class TriadicTitler:
             lines = book_file.read().splitlines()
 
             total_score = 0
+            total_transition_score = 0
             titles = []
             book_titles = []
 
             for line in lines:
                 if line.startswith("% CHAPTER"):
                     total_score += int(line.split('=')[1].strip())
+                elif line.startswith("% TRANSITION SCORE"):
+                    total_transition_score += int(line.split('=')[1].strip())
                 elif line.startswith("\chapter{"):
                     start = line.index('{') + 1
                     end = line.rindex('}')
@@ -37,6 +40,8 @@ class TriadicTitler:
             
             print(f"chapters = {len(titles)}")
             print(f"total score = {total_score}")
+            print(f"total transition score = {total_transition_score}")
             print(f"average score = {total_score / len(titles):.1f}")
+            print(f"average transition score = {total_transition_score / len(titles):.1f}")            
             for title in book_titles:
                 print(title)

@@ -37,6 +37,11 @@ class NarrativeMemory:
         """Return the full narrative memory as a Python list."""
         return self.state.tolist()
 
+    def copy(self) -> "NarrativeMemory":
+        copy = NarrativeMemory(self.lemma_embedding_dict, self.configuration)
+        copy.state = np.copy(self.state)
+        return copy
+
     # ------------------------------------------------------------
     # UPDATE MEMORY FROM A SENTENCE
     # ------------------------------------------------------------
