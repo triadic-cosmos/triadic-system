@@ -5,28 +5,37 @@ from engine.triadic_llm import TriadicLLM
 
 from dmlg import WriterParams, DATA_FOLDER
 
-MODEL = "alice-hyde-meta"
+MODEL = "alice-dorian-astro-honey"
 MODEL_PREFIX = "base"
 DATASET_FOLDER = DATA_FOLDER + MODEL
-PREFIXES = ["base1", "base2", "base3"]
-MAX_CHAPTERS = 100
+PREFIXES = ["alice", "astronomy", "dorian", "honeymoon"]
+MAX_CHAPTERS = 1000
 MAX_RETRIES = 3
 NUM_LINES = 2000
 ITERATIVE = True
-LEMMA_BLACKLIST = {"jekyll", "hyde", "utterson", "poole", "gregor", "mr"}
+LEMMA_BLACKLIST = {"mr"}
+CAS_VECTORS = [
+    [1.0, 0, 0, 0],
+    [0, 1.0, 0, 0],
+    [0, 0, 1.0, 0],
+    [0, 0, 0, 1.0]
+]
 
 # Main
 llm: TriadicLLM = TriadicLLM()
 
-for prefix in PREFIXES:
-    print(f"Processing prefix {prefix}...")
-    
-    if ITERATIVE:
-        writer: TriadicWriter = TriadicWriter(MODEL, MODEL_PREFIX)
-        suffix = "_iter_book"
-    else:
-        suffix = "_book"
+# Create writer when iterative
+if ITERATIVE:
+    writer: TriadicWriter = TriadicWriter(MODEL, MODEL_PREFIX)
+    suffix = "_iter_book"
+else:
+    suffix = "_book"
 
+for index in range(len(PREFIXES)):
+    prefix = PREFIXES[index]
+    cas_vector = CAS_VECTORS[index] # put to None if no CAS
+    print(f"Processing book with prefix {prefix} and CAS {cas_vector}...")
+    
     params: TriadicNarratorParams = TriadicNarratorParams(
         input_filename=f"{DATASET_FOLDER}/output/{prefix}_output.txt",
         output_filename=f"{DATASET_FOLDER}/narrator/{prefix}{suffix}.txt",
@@ -36,7 +45,8 @@ for prefix in PREFIXES:
     writer_params: WriterParams = WriterParams(
         lines = NUM_LINES,
         max_chapters = MAX_CHAPTERS,
-        lemma_blacklist = LEMMA_BLACKLIST
+        lemma_blacklist = LEMMA_BLACKLIST,
+        cas_vector = cas_vector
     )
 
     if ITERATIVE:                

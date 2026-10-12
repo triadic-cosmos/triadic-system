@@ -4,13 +4,14 @@ from dmlg import WriterParams
 
 import time
 
-MODEL = "alice-hyde-meta"
+MODEL = "alice-dorian-astro-honey"
 PREFIXES = ["base"]
 
 NUM_LINES = 2000
 MAX_CHAPTERS = 1000
 BEAM_SEARCH = False
-LEMMA_BLACKLIST = {"jekyll", "hyde", "utterson", "poole", "gregor", "mr"}
+LEMMA_BLACKLIST = {"mr"}
+CAS_VECTOR = [2.0, 0.0, 0.5, 1.0]
 KEYWORDS = {}
 
 # Quotes from original book
@@ -29,7 +30,8 @@ for prefix in PREFIXES:
         prompt = ALICE_PROMPT,
         keywords = KEYWORDS,
         beam_search = BEAM_SEARCH,
-        lemma_blacklist = LEMMA_BLACKLIST
+        lemma_blacklist = LEMMA_BLACKLIST,
+        cas_vector = CAS_VECTOR        
     )
     writer.write(params)
 

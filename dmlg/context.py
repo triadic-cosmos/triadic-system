@@ -133,8 +133,10 @@ class ContextWindow:
     configuration: Configuration
     lemma_embedding_dict: any
     tracking: any
-    
+        
     def __post_init__(self):
+        self._cas_vector = []
+        
         self._token_histories = []
         self._token_histories_start = [] 
         for i in range(len(self.configuration.history_size)):
@@ -220,6 +222,8 @@ class ContextWindow:
             ctx._token_histories[i] = self._token_histories[i].copy()
             ctx._token_histories_start[i] = self._token_histories_start[i]                                                            
 
+        ctx._cas_vector = self._cas_vector
+    
         ctx._current_tokens = self._current_tokens.copy()        
         ctx._current_sentence = self._current_sentence.copy()
         ctx._last_token = self._last_token
@@ -232,6 +236,13 @@ class ContextWindow:
         ctx._entity_tracker = self._entity_tracker.copy()
         ctx._narrative_memory = self._narrative_memory.copy()
         return ctx
+    
+    def set_cas_vector(self, cas_vector: List[float]):
+        self._cas_vector = cas_vector
+    
+    @property
+    def cas_vector(self) -> List[float]:
+        return self._cas_vector
     
     @property
     def current_tokens(self) -> List[Token]:
@@ -277,6 +288,7 @@ class InputEncoder:
         entity_embedding = model_input.window.get_entity_tracker_embedding()
         token_history = model_input.window.get_token_history_embedding()
         line_position = model_input.line_position
+        cas_vector = model_input.window.cas_vector
 
         return (
             current_embedding
@@ -284,4 +296,5 @@ class InputEncoder:
             + entity_embedding
             + token_history
             + line_position
+            + cas_vector
         )

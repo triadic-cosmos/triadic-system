@@ -54,6 +54,7 @@ class WriterParams:
     prompt: List[str] = None # prompt lines
     keywords: Set[str] = None # keywords for beam-search
     lemma_blacklist: Set[str] = None # blacklisted lemma set
+    cas_vector: List[float] = None # cas vector
     beam_search: bool = False # use beam-search
     max_tokens: int = 70 # maximum grammar + lemma tokens per sentence
     max_attempts: int = 20000 # number of retry attempts to generate sentence 

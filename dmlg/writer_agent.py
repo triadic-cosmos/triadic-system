@@ -545,6 +545,9 @@ class WriterAgent:
             while index <= params.amount:
                 # Create new context
                 ctx = self.new_context()
+                if params.cas_vector:
+                    print(f"Using CAS vector: {params.cas_vector}")
+                    ctx.set_cas_vector(params.cas_vector)
 
                 # Generate story
                 story = self.write_story(

@@ -24,7 +24,7 @@ class TrackerEntity:
         return score
 
     def __str__(self):
-        return f"{self.lemma} {self.grammar} {self.amount} {self.score()}"
+        return f"{self.lemma} {self.amount}"
 
 @dataclass
 class TrackerMap:

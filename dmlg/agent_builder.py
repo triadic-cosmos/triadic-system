@@ -51,16 +51,21 @@ class TrainingBatchBuilder:
         # log statistics for batch
         sentence.batch.show(index)        
 
-    def build_curriculum(self, curriculum_list: List[Curriculum]) -> Curriculum:
+    def build_curriculum(self, curriculum_list: List[Curriculum], cas_vector_size: int = 0) -> Curriculum:
         combined_curriculum = Curriculum()
         total_samples: int = 0
-        
-        for curriculum in curriculum_list:
+
+        for pos, curriculum in enumerate(curriculum_list):
             line: int = 0
             paragraph_line: int = 0
             paragraph_divider: int = self.agent.configuration.paragraph_divider
             last_line = len(curriculum.sentences) - 1
             context = self.agent.new_context()
+            if cas_vector_size > 0:
+                cas_vector = [0] * cas_vector_size
+                cas_vector[pos] = 1.0
+                print(f"CAS vector : {cas_vector}")
+                context.set_cas_vector(cas_vector)
             
             for sentence in curriculum.sentences:
                 if sentence.starts_paragraph():
@@ -153,7 +158,8 @@ class AgentBuilder:
         agent.add_tracking(curriculum)
 
         training_builder: TrainingBatchBuilder = TrainingBatchBuilder(agent)
-        combined_curriculum: Curriculum = training_builder.build_curriculum(curriculum)
+        combined_curriculum: Curriculum = training_builder.build_curriculum(
+            curriculum, self.configuration.get_cas_vector_size())
 
         iteration: int = 0
         while iteration < 1 or max_epochs > 0:

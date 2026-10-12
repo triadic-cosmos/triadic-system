@@ -9,8 +9,8 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 768
-    other_hidden_size: int = 768
+    first_hidden_size: int = 896
+    other_hidden_size: int = 896
     lemma_input_dimension: int = 70
     lemma_output_dimension: int = 128
     total_pages: int = 1000000
@@ -69,12 +69,18 @@ class Configuration:
         # current sentence position (1) + punctuation (1)
         return 2 * self.last_embeddings * self.last_embedding_size + 2
 
+    def get_cas_vector_size(self) -> int:
+        if hasattr(self, "cas_vector_size"):
+            return self.cas_vector_size
+        return 0
+
     def generator_input_size(self) -> int:
         # line position (1) + paragraph position (1)
         return self.generator_current_context_size() + \
                self.narrative_state_size * self.narrative_sentences + \
                self.tracker_entities + \
-               sum(self.history_size) + 2
+               sum(self.history_size) + \
+               self.get_cas_vector_size() + 2 
 
     def generator_output_size(self) -> int:
         # lemma embedding

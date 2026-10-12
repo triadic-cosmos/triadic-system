@@ -59,7 +59,7 @@ class TriadicNarratorParams:
     min_transition_sentences: int = 2
     max_transition_sentences: int = 15
     min_score: int = 85
-    min_transition_score: int = 85
+    min_transition_score: int = 90
     max_retries: int = 15
     max_lines: int = 50
     max_tokens: int = 5000
@@ -194,6 +194,9 @@ class TriadicIterativeNarrator:
             start = time.perf_counter()
 
             ctx = self.writer.agent.new_context()
+            if self.writer_params.cas_vector:
+                ctx.set_cas_vector(self.writer_params.cas_vector)
+            
             chapter_nr = 1
             line_nr = 0
             previous_chapter = None
@@ -248,6 +251,7 @@ class TriadicIterativeNarrator:
                 # Determine a transition to previous chapter
                 chapter.transition = None
                 if previous_chapter:
+                    old_moderated_sentences = previous_chapter.moderated_sentences.copy()
                     for _ in range(self.params.max_retries):
                         transition = bridge_chapters(self.llm, previous_chapter, chapter, self.params.max_tokens)
                         if len(transition) >= self.params.min_transition_sentences and \
@@ -269,10 +273,12 @@ class TriadicIterativeNarrator:
                         chapter.transition_score = score
                         if score > 0:
                             break
-                if chapter.transition_score < self.params.min_transition_score:
-                    continue
-                print(f"The chapter has transition score {chapter.transition_score}")
-        
+                    if chapter.transition_score < self.params.min_transition_score:
+                        # remove transition from previous chapter
+                        previous_chapter.moderated_sentences = old_moderated_sentences
+                        continue
+                    print(f"The chapter has transition score {chapter.transition_score}")
+
                 # Write chapter to output file
                 if chapter.transition:
                     output_file.write("% TRANSITION\n")
