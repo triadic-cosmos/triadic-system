@@ -47,7 +47,7 @@ class TriadicLLM:
             do_sample=True,
             temperature=TEMPERATURE,
             top_p=TOP_P,
-            max_time=90.0,
+            max_time=120.0,
             repetition_penalty=1.1) 
         return self.tokenizer.decode(output[0], skip_special_tokens=True)
 
