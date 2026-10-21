@@ -5,21 +5,16 @@ from engine.triadic_llm import TriadicLLM
 
 from dmlg import WriterParams, DATA_FOLDER
 
-MODEL = "alice-dorian-astro-honey"
+MODEL = "mix1"
 MODEL_PREFIX = "base"
 DATASET_FOLDER = DATA_FOLDER + MODEL
-PREFIXES = ["alice", "astronomy", "dorian", "honeymoon"]
+PREFIXES = ["run2"]
 MAX_CHAPTERS = 1000
 MAX_RETRIES = 3
 NUM_LINES = 2000
 ITERATIVE = True
-LEMMA_BLACKLIST = {"mr"}
-CAS_VECTORS = [
-    [1.0, 0, 0, 0],
-    [0, 1.0, 0, 0],
-    [0, 0, 1.0, 0],
-    [0, 0, 0, 1.0]
-]
+LEMMA_BLACKLIST = {"mr", "dr"}
+CAS_VECTORS = [[0,1,1,1,0,0.5,0.5,0.5,0,0]]
 
 # Main
 llm: TriadicLLM = TriadicLLM()

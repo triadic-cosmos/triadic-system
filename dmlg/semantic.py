@@ -18,15 +18,19 @@ class SemanticEngine:
         cleaned = sentence.strip().translate(str.maketrans("", "", string.punctuation))
         return cleaned.lower().split()
 
+    def _log(self, message: str):
+        if VERBOSE:
+            print(message)
+
     def validate(self, params: WriterParams, previous: List[str], sentence: str) -> bool:
         # check if sentence ends with punctuation
         if not (sentence.endswith(".") or sentence.endswith("!") or sentence.endswith("?")):
-            print("PUNCTUATION")
+            self._log("PUNCTUATION")
             return False
         
         # avoid leftover control tokens
         if sentence.count("<") > 0:
-            print("CONTROL")
+            self._log("CONTROL")
             return False
                 
         words = self._clean(sentence)
@@ -34,8 +38,7 @@ class SemanticEngine:
         # minimum and maximum number of words
         nr_words = len(words)
         if nr_words < params.min_words:
-            if VERBOSE:
-                print("MIN_LENGTH")
+            self._log("MIN_LENGTH")
             return False
         
         if nr_words > params.max_words:
@@ -45,39 +48,37 @@ class SemanticEngine:
         # forbidden starts of sentences
         first = words[0]
         if first in BAD_START:
-            print("START")
+            self._log("START")
             return False
         
         # forbidden ends of sentences
         last = words[-1]
         if last in BAD_END:
-            print("END")
+            self._log("END")
             return False
 
         # check if sentence is already generated before
         for prev in previous:
             if prev == sentence:
-                print("PREVIOUS")
+                self._log("PREVIOUS")
                 return False
 
         # word repeat (at least 2x)
         for i in range(len(words) - 1):
             if words[i] == words[i+1]:
-                if VERBOSE:
-                    print("A A")
+                self._log("A A")
                 return False
 
         # repeat with intermediate word (A B A B)
         for i in range(len(words) - 3):
             if words[i] == words[i+2] and words[i+1] == words[i+3]:
-                if VERBOSE:
-                    print("A B A B")
+                self._log("A B A B")
                 return False
 
         # trigram repeat (A B C A B C)
         for i in range(len(words) - 5):
             if words[i:i+3] == words[i+3:i+6]:
-                print("A B C A B C")
+                self._log("A B C A B C")
                 return False
             
         return True

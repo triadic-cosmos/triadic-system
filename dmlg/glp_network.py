@@ -7,7 +7,7 @@ import random
 import torch
 import torch.nn.functional as F
 
-from .config import Configuration
+from .config import Configuration, SENTENCE_BASED
 from .tokens import (
     Token,
     TargetToken,
@@ -15,12 +15,13 @@ from .tokens import (
     TokenLogit,
     TokenPage,
     LemmaEmbeddingDictionary,
-    GRAMMAR_TOKENS
+    GRAMMAR_TOKENS,
+    STRUCTURE_LENGTH
 )
 from .writer_story import WriterParams
 from .context import ModelInput, InputEncoder
 from .neural import NeuralNetwork
-from .training import TrainingSample, TrainingBatch
+from .training import TrainingBatch, TrainingSample, TrainingSampleSentence
 from .rulebased import RuleBasedFilter
 
 RULE_BASED: RuleBasedFilter = RuleBasedFilter()
@@ -80,7 +81,19 @@ class GlpNetwork:
 
             emb_obj = self.lemma_embedding_dict.get_output_embedding(s.target)
             emb_obj.update(embedding_pred.tolist(), alpha)
+
+    def _update_lemma_embeddings_after_sentence(self, sample: TrainingSampleSentence):
+        alpha: float = self.configuration.learn_alpha
+        
+        x = torch.tensor([sample.input_vector], dtype=torch.float32)
+        with torch.no_grad():
+            pred = self.glp_network(x).squeeze(0)
+            embedding_pred = F.normalize(pred, p=2, dim=0)
             
+            for target in sample.targets:
+                emb_obj = self.lemma_embedding_dict.get_output_embedding(target)
+                emb_obj.update(embedding_pred.tolist(), alpha)
+
     # ------------------------------------------------------------
     # Token Learning
     # ------------------------------------------------------------
@@ -145,11 +158,60 @@ class GlpNetwork:
         self._learn_glp(batch.samples)
 
         self._update_lemma_embeddings_after_batch(batch.samples)
+        
+    def learn_sentence(self, sample: TrainingSampleSentence):
+        if sample:
+            self._learn_glp_sentence(sample)
+            
+            self._update_lemma_embeddings_after_sentence(sample)
 
     # ------------------------------------------------------------
     # Sample Learning
     # ------------------------------------------------------------
     
+    def _learn_glp_sentence(self, sample: TrainingSampleSentence):
+        """
+        Train the GLP semantic sentence model.
+
+        The goal:
+        ---------
+        Given an input vector representing the context, predict a single
+        sentence embedding that represents the semantic meaning of the entire sentence.
+
+        Training procedure:
+        -------------------
+        1. Convert the input vector into a tensor.
+        2. Run the GLP network to predict the sentence embedding.
+        3. Normalize the predicted embedding (unit vector).
+        4. Normalize the target embedding (unit vector).
+        5. Compute cosine similarity loss: 1 - cos(pred, target).
+        6. Backpropagate and update the GLP network parameters.
+
+        This is a stable, convex-like objective that works extremely well for
+        sentence-level semantic learning.
+        """
+
+        # 1. Convert input vector to tensor (batch size = 1)
+        xs = torch.tensor([sample.input_vector], dtype=torch.float32)
+
+        # 2. Predict the sentence embedding
+        pred = self.glp_network(xs)
+
+        # 3. Normalize predicted embedding to unit length
+        pred = F.normalize(pred, p=2, dim=1)
+
+        # 4. Build and normalize the target sentence embedding
+        target = torch.tensor([sample.target_vector], dtype=torch.float32)
+        target = F.normalize(target, p=2, dim=1)
+
+        # 5. Cosine similarity loss (maximize cosine similarity)
+        loss = 1.0 - F.cosine_similarity(pred, target).mean()
+
+        # 6. Backpropagation
+        self.glp_network.opt.zero_grad()
+        loss.backward()
+        self.glp_network.opt.step()
+
     def _learn_glp(self, samples: List[TrainingSample]):
         # Input batch
         xs = torch.tensor([s.input_vector for s in samples], dtype=torch.float32)
@@ -185,12 +247,26 @@ class GlpNetwork:
         # Deterministic end of line after end punctuation
         if model_input.window.last_token().is_end_punctuation():
             return [TokenLogit(Token.EOL, Token.EOL, 1.0)]
-        
-        x = torch.tensor([self.encoder.encode(model_input)], dtype=torch.float32)
-        with torch.no_grad():
-            pred = self.glp_network(x).squeeze(0)
-        lemma_pred = F.normalize(pred, p=2, dim=0)
+                
+        lemma_pred = model_input.window.sentence_prediction
+        if lemma_pred is None:
+            x = torch.tensor([self.encoder.encode(model_input)], dtype=torch.float32)
+            with torch.no_grad():
+                pred = self.glp_network(x).squeeze(0)
+            lemma_pred = F.normalize(pred, p=2, dim=0)
+            if SENTENCE_BASED:
+                model_input.window.set_sentence_prediction(lemma_pred)
 
+        # Use structural information in sentence vector
+        if SENTENCE_BASED and model_input.window.last_token().is_eol():
+            structure = lemma_pred.numpy()[0]
+            if structure > params.sentence_chapter_threshold and model_input.allow_chapter:
+                print("C", end = "")
+                return [TokenLogit(Token.SOC, Token.SOC, 1.0)]
+            if structure > params.sentence_paragraph_threshold and model_input.allow_paragraph:
+                print("P", end = "")
+                return [TokenLogit(Token.SOP, Token.SOP, 1.0)]
+        
         # Determine incompatible tokens
         min_tokens = params.min_words * 2
         incompatible_grammar = RULE_BASED.determine_incompatible_grammar(model_input, min_tokens)

@@ -20,6 +20,16 @@ class TrainingSample:
     page_index: int          # -1 for terminals
 
 # ============================================================
+# TrainingSampleSentence
+# ============================================================
+
+@dataclass
+class TrainingSampleSentence:
+    input_vector: List[float]
+    targets: List[TargetToken]
+    target_vector: List[float]
+
+# ============================================================
 # TrainingBatch
 # ============================================================
 

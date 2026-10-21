@@ -4,8 +4,8 @@ from engine.triadic_titler import TriadicTitler
 
 from dmlg import DATA_FOLDER
 
-BOOK_PREFIX = "alice"
-DATASET_NAME = "alice-dorian-astro-honey"
+DATASET_NAME = "mix1"
+BOOK_PREFIX = "run1"
 EXTRA = "_iter"
 BOOK_FILENAME = DATA_FOLDER + DATASET_NAME + "/narrator/" + BOOK_PREFIX + EXTRA + "_book.txt"
 TITLES = 5

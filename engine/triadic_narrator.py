@@ -19,7 +19,8 @@ FIX_PROMPT = (
 "Try to stay close to the original content. "
 "Keep all story elements related and realistic. "
 "Fill the gaps and fix broken sentences. "
-"No conversations, use purely descriptive sentences. Do not add a title! "
+"Use purely descriptive sentences, no conversations. Do not add a title! "
+"No explanations or references between parentheses. No formatting symbols. " 
 "Avoid any duplication. End the story with a line containing: The End. "
 "This is the chapter: "
 )

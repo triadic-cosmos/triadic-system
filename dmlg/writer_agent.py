@@ -7,12 +7,13 @@ import random
 import pickle
 import math
 
-from .config import Configuration
+from .config import Configuration, SENTENCE_BASED
 from .writer_environment import WriterEnvironment
 from .writer_story import WriterStory, WriterSentence, WriterParams
-from .tokens import Token, TokenDictionary, TokenLogit
+from .tokens import Token, TokenDictionary, TokenLogit, TargetToken
 from .context import ContextWindow, ModelInput
-from .glp_network import GlpNetwork, TrainingBatch
+from .glp_network import GlpNetwork
+from .training import TrainingBatch, TrainingSampleSentence
 from .curriculum import Curriculum, CurriculumSentence
 from .entity_tracker import TrackerMap
 from .bias import BiasMLP, AMLPBias
@@ -72,6 +73,10 @@ class WriterAgent:
         if self.glp_network.glp_network.bias:
             self.glp_network.glp_network.bias.bias_mlp.plot()
 
+    def learn_sentence(self, sample: TrainingSampleSentence):
+        self.glp_network.learn_sentence(sample)
+        self.training_count += len(sample.targets)
+
     def learn_batch(self, epoch: int, batch: TrainingBatch) -> TrainingBatch:
         if batch.has_samples():
             self.glp_network.learn_batch(batch)
@@ -81,18 +86,30 @@ class WriterAgent:
             return batch
 
     def train_curriculum(self, curriculum: Curriculum, random_epochs: int):
-        super_batch: TrainingBatch = TrainingBatch()
+        if SENTENCE_BASED:
+            # Do sentence based training        
+            for epoch in range(1, random_epochs + 1):
+                sentence: CurriculumSentence = curriculum.get_random_sentence(self.rng)
+                sample: TrainingSampleSentence = sentence.sample
+                self.learn_sentence(sample)               
+                if epoch % self.configuration.show_epochs_step == 0:
+                    print(epoch)
+        else:
+            # Do token based training
+            super_batch: TrainingBatch = TrainingBatch()
 
-        # Train sentences using random order
-        for epoch in range(1, random_epochs + 1):
-            sentence: CurriculumSentence = curriculum.get_random_sentence(self.rng)
-            super_batch.append(sentence.batch)
-            if epoch % self.configuration.epochs_step == 0:
-                super_batch = self.learn_batch(epoch, super_batch)
-            if epoch % self.configuration.show_epochs_step == 0:
-                print(epoch)
+            # Train sentences using random order
+            for epoch in range(1, random_epochs + 1):
+                sentence: CurriculumSentence = curriculum.get_random_sentence(self.rng)
+                super_batch.append(sentence.batch)
+                if epoch % self.configuration.epochs_step == 0:
+                    super_batch = self.learn_batch(epoch, super_batch)
+                if epoch % self.configuration.show_epochs_step == 0:
+                    print(epoch)
         
-        self.learn_batch(random_epochs + 1, super_batch)
+            self.learn_batch(random_epochs + 1, super_batch)
+
+        # Show progress
         if epoch % self.configuration.show_epochs_step != 0:
             print(epoch)
         self.training_epochs += random_epochs
@@ -194,6 +211,7 @@ class WriterAgent:
     def generate_sentence(
             self, params: WriterParams,
             model_input: ModelInput, sentences: List[str]) -> WriterSentence:
+        generated_targets: List[TargetToken] = []
         generated: List[Token] = []
         ctx: ContextWindow = model_input.window
 
@@ -201,6 +219,9 @@ class WriterAgent:
             proposal: TokenLogit = self.propose_token(params, model_input)
             if proposal is None:
                 break
+
+            if SENTENCE_BASED:
+                generated_targets.append(TargetToken(proposal.grammar, proposal.lemma))
 
             # --- 1. ALWAYS append grammar token ---
             grammar_tok = self.token_dictionary.add_and_get(proposal.grammar.text)
@@ -223,7 +244,7 @@ class WriterAgent:
             
                     # semantic validation
                     if self.environment.semantic.validate(params, sentences, natural):
-                        return WriterSentence(generated, natural)
+                        return WriterSentence(generated_targets, generated, natural)
 
                 # failed quality check
                 return None
@@ -338,7 +359,7 @@ class WriterAgent:
                             natural = self.environment.grammar.convert_from_canonical_tokens(new_tokens)
                             if not self.environment.semantic.validate(params, sentences, natural):
                                 continue
-                            best_sentence = WriterSentence(new_tokens, natural)
+                            best_sentence = WriterSentence([], new_tokens, natural)
                             best_score = new_beam.score
 
                     new_beams.append(new_beam)
@@ -382,6 +403,10 @@ class WriterAgent:
             
     def update_context(self, ctx: ContextWindow, sentence: WriterSentence):
         self.update_context_tokens(ctx, sentence.tokens)
+        
+        if SENTENCE_BASED:
+            sentence_vector = self.glp_network.lemma_embedding_dict.get_sentence_embedding(sentence.target_tokens)
+            ctx.update_sentence_memory(sentence_vector)
 
     def write_chapter(self, line_nr: int, max_lines: int, ctx: ContextWindow, params: WriterParams) -> WriterStory:
         chapter_lines = 0

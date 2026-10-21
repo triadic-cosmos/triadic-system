@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 from typing import List
 
+SENTENCE_BASED = True
+
 @dataclass
 class Configuration:
     name: str
@@ -9,10 +11,10 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 896
-    other_hidden_size: int = 896
-    lemma_input_dimension: int = 70
-    lemma_output_dimension: int = 128
+    first_hidden_size: int = 640
+    other_hidden_size: int = 640
+    lemma_input_dimension: int = 32
+    lemma_output_dimension: int = 72
     total_pages: int = 1000000
     max_page_input_size: int = 1
     
@@ -21,25 +23,25 @@ class Configuration:
     # ------------------------------------------------------------
     position_divider = 30
     paragraph_divider = 50
+
+    # sentence based input size: 20 x (32 + 72) + 418 + 2 = 2500
     
-    # 30 + 40 + 50 + 60 + 70 = 250
-    history_size = [30, 40, 50, 60, 70]
-    history_alpha = [0.91, 0.93, 0.95, 0.97, 0.99]
-    
-    # 8 * 32 = 256
-    narrative_sentences: int = 8
+    narrative_sentences: int = 20
     narrative_state_size: int = 32
     narrative_hidden_size: int = 64
     narrative_token_size: int = 8
     
-    # 2 * 15 * 16 + 2 = 482
-    last_embeddings: int = 15
-    last_embedding_size: int = 16
-    
-    # 250 + 256 + 482 + 1010 + 2 = 2000
-    tracker_entities: int = 1010
+    tracker_entities: int = 418
     tracker_alpha: float = 0.98
+
+    # not used for sentence based
     
+    history_size = []
+    history_alpha = []
+    
+    last_embeddings: int = 5
+    last_embedding_size: int = 16
+
     # ------------------------------------------------------------
     # Curriculum parameters
     # ------------------------------------------------------------
@@ -75,7 +77,16 @@ class Configuration:
         return 0
 
     def generator_input_size(self) -> int:
-        # line position (1) + paragraph position (1)
+        # line position (1) + paragraph position (1) = 2
+        
+        # sentence based encoding
+        if SENTENCE_BASED:
+            return self.narrative_sentences * self.lemma_output_dimension + \
+                   self.narrative_state_size * self.narrative_sentences + \
+                   self.tracker_entities + \
+                   self.get_cas_vector_size() + 2
+        
+        # token based encoding
         return self.generator_current_context_size() + \
                self.narrative_state_size * self.narrative_sentences + \
                self.tracker_entities + \

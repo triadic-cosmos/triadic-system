@@ -4,18 +4,16 @@ from dmlg import WriterParams
 
 import time
 
-MODEL = "alice-dorian-astro-honey"
+MODEL = "mix1"
 PREFIXES = ["base"]
 
 NUM_LINES = 2000
 MAX_CHAPTERS = 1000
 BEAM_SEARCH = False
-LEMMA_BLACKLIST = {"mr"}
-CAS_VECTOR = [2.0, 0.0, 0.5, 1.0]
+LEMMA_BLACKLIST = {"mr", "dr"}
+PROMPT = []
+CAS_VECTOR = [0,1,1,1,0,0.5,0.5,0.5,0,0]
 KEYWORDS = {}
-
-# Quotes from original book
-ALICE_PROMPT = ["The rabbit hole went straight on like a tunnel."]
 
 # Generation main using keywords, prompt and beam search
 start = time.perf_counter()
@@ -27,7 +25,7 @@ for prefix in PREFIXES:
     params: WriterParams = WriterParams(
         lines = NUM_LINES,
         max_chapters = MAX_CHAPTERS,
-        prompt = ALICE_PROMPT,
+        prompt = PROMPT,
         keywords = KEYWORDS,
         beam_search = BEAM_SEARCH,
         lemma_blacklist = LEMMA_BLACKLIST,

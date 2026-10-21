@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 from uuid import UUID
+
+import numpy as np
 import math
 import random
 
@@ -82,6 +84,11 @@ ALL_PUNCTIATION_TOKENS = {
     "<COMMA>"
 }
 
+CHAPTER_VECTOR = [1.0]
+PARAGRAPH_VECTOR = [0.0]
+DEFAULT_VECTOR = [-1.0]
+STRUCTURE_LENGTH = len(DEFAULT_VECTOR)
+
 # ============================================================
 # Token (symbolic only)
 # ============================================================
@@ -125,6 +132,9 @@ class Token:
     # ------------------------------------------------------------
     def is_eol(self) -> bool:
         return self._text == "<EOL>"
+
+    def is_chapter(self) -> bool:
+        return self._text == "<SOC>"
 
     def is_paragraph(self) -> bool:
         return self._text == "<SOP>"
@@ -213,6 +223,9 @@ class TokenLogit:
 class TargetToken:
     grammar: Token
     lemma: Token
+
+    def get_key(self):
+        return (self.grammar.id * 100_000_000) + self.lemma.id
 
 TargetToken.PERIOD = TargetToken(Token.PERIOD, Token.PERIOD)
 
@@ -378,6 +391,7 @@ class LemmaEmbeddingDictionary:
     def __init__(self, input_dimension: int, output_dimension: int):
         self.input_embeddings: Dict[int, LearnedTokenEmbedding] = {}
         self.output_embeddings: Dict[int, LearnedTokenEmbedding] = {}
+        self.fixed_output_embeddings: Dict[int, LearnedTokenEmbedding] = {}
         self.input_dimension = input_dimension
         self.output_dimension = output_dimension
 
@@ -390,10 +404,112 @@ class LemmaEmbeddingDictionary:
         return embedding
 
     def get_output_embedding(self, target: TargetToken) -> LearnedTokenEmbedding:
-        key = (target.grammar.id * 100_000_000) + target.lemma.id
+        key = target.get_key()
         embedding = self.output_embeddings.get(key)
         if embedding:
             return embedding
         embedding = LearnedTokenEmbedding.create_from_id(key, self.output_dimension)
         self.output_embeddings[key] = embedding
         return embedding
+
+    def get_fixed_output_embedding(self, target: TargetToken) -> LearnedTokenEmbedding:
+        key = target.get_key()
+        embedding = self.fixed_output_embeddings.get(key)
+        if embedding:
+            return embedding
+        embedding = LearnedTokenEmbedding.create_from_id(key, self.output_dimension)
+        self.fixed_output_embeddings[key] = embedding
+        return embedding
+
+import numpy as np
+
+class LemmaEmbeddingDictionary:
+    def __init__(self, input_dimension: int, output_dimension: int):
+        self.input_embeddings: Dict[int, LearnedTokenEmbedding] = {}
+        self.output_embeddings: Dict[int, LearnedTokenEmbedding] = {}
+        self.fixed_output_embeddings: Dict[int, LearnedTokenEmbedding] = {}
+        self.input_dimension = input_dimension
+        self.output_dimension = output_dimension
+
+    def get_input_embedding(self, lemma: Token) -> LearnedTokenEmbedding:
+        embedding = self.input_embeddings.get(lemma._id)
+        if embedding:
+            return embedding
+        embedding = LearnedTokenEmbedding.create(lemma, self.input_dimension)
+        self.input_embeddings[lemma._id] = embedding
+        return embedding
+
+    def get_output_embedding(self, target: TargetToken) -> LearnedTokenEmbedding:
+        key = target.get_key()
+        embedding = self.output_embeddings.get(key)
+        if embedding:
+            return embedding
+        embedding = LearnedTokenEmbedding.create_from_id(key, self.output_dimension)
+        self.output_embeddings[key] = embedding
+        return embedding
+
+    def get_fixed_output_embedding(self, target: TargetToken) -> LearnedTokenEmbedding:
+        key = target.get_key()
+        embedding = self.fixed_output_embeddings.get(key)
+        if embedding:
+            return embedding
+        # create only the semantic embedding without 4 structural dimensions
+        embedding = LearnedTokenEmbedding.create_from_id(key, self.output_dimension - STRUCTURE_LENGTH)
+        self.fixed_output_embeddings[key] = embedding
+        return embedding
+
+    def get_sentence_embedding(self, targets: List[TargetToken]) -> List[float]:
+        """
+        Build a cosine-distance optimized sentence embedding.
+
+        The goal is to produce ONE vector that lies as close as possible
+        (in cosine similarity space) to ALL fixed output embeddings of the
+        target tokens in the sentence.
+
+        The mathematically optimal solution is:
+        1. Normalize each token embedding
+        2. Compute the mean direction vector
+        3. Normalize again to unit length
+
+        This produces the vector with maximal average cosine similarity
+        to all token embeddings.
+        """
+
+        # Edge case: empty sentence → return zero vector
+        if not targets:
+            return [0.0] * self.output_dimension
+        
+        chapter = False
+        paragraph = False
+
+        # Collect all fixed output embeddings as numpy vectors
+        vectors = []
+        for target in targets:
+            if target.grammar.is_chapter():
+                chapter = True
+            elif target.grammar.is_paragraph():
+                paragraph = True
+            else:
+                embedding = self.get_fixed_output_embedding(target)
+                vec = np.array(embedding.embedding, dtype=np.float32)
+                vectors.append(vec)
+
+        V = np.stack(vectors, axis=0)
+
+        # Normalize each embedding vector (unit length)
+        norms = np.linalg.norm(V, axis=1, keepdims=True) + 1e-8
+        V_norm = V / norms
+
+        # Compute the mean direction vector
+        mean_vec = np.mean(V_norm, axis=0)
+
+        # Normalize again → final cosine-optimized sentence embedding
+        final_vec = mean_vec / (np.linalg.norm(mean_vec) + 1e-8)
+        semantic = final_vec.tolist()
+
+        if chapter:
+            return CHAPTER_VECTOR + semantic
+        elif paragraph:
+            return PARAGRAPH_VECTOR + semantic
+        else:
+            return DEFAULT_VECTOR + semantic

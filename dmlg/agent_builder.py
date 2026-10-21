@@ -7,16 +7,16 @@ from typing import List
 
 from .grammar import GrammarEngine
 from .semantic import SemanticEngine
-from .config import Configuration
+from .config import Configuration, SENTENCE_BASED
 from .context import ContextWindow
 from .writer_story import WriterParams
 from .writer_agent import WriterAgent, ModelInput
 from .writer_environment import WriterEnvironment
 from .curriculum import Curriculum, CurriculumSentence
 from .tokens import TokenPage
-from .training import TrainingBatch, TrainingSample
+from .training import TrainingBatch, TrainingSample, TrainingSampleSentence
 
-DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v10/"
+DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v11/"
 MODEL_FILENAME: str = "_model.bin"
 TOKENS_FILENAME: str = "_tokens.txt"
 OUTPUT_FILENAME: str = "_output.txt"
@@ -47,9 +47,18 @@ class TrainingBatchBuilder:
 
         # 3. context / narrative for each sentence
         self.update_context(sentence, context)
-            
-        # log statistics for batch
-        sentence.batch.show(index)        
+
+        # 4. convert batch to sentence
+        if SENTENCE_BASED:
+            input_vector = sentence.batch.samples[0].input_vector
+            targets = [sample.target for sample in sentence.batch.samples]
+            target_vector = self.agent.glp_network.lemma_embedding_dict.get_sentence_embedding(targets)
+            sentence.batch = None
+            sentence.sample = TrainingSampleSentence(input_vector, targets, target_vector)
+            context.update_sentence_memory(target_vector)
+        else:
+            # log statistics for batch
+            sentence.batch.show(index)        
 
     def build_curriculum(self, curriculum_list: List[Curriculum], cas_vector_size: int = 0) -> Curriculum:
         combined_curriculum = Curriculum()
@@ -72,7 +81,10 @@ class TrainingBatchBuilder:
                     paragraph_line = 0
                 line_position = [line / last_line, paragraph_line / paragraph_divider]                                
                 self.build_sentence(line, sentence, line_position, context)
-                total_samples += len(sentence.batch.samples)
+                if SENTENCE_BASED:
+                    total_samples += len(sentence.sample.targets)
+                else:
+                    total_samples += len(sentence.batch.samples)
                 line += 1
                 paragraph_line += 1
                 combined_curriculum.sentences.append(sentence)

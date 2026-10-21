@@ -1,12 +1,12 @@
 # Add a bias MLP to a GLPG model for finetuning
 from engine.triadic_writer import TriadicWriter
 
-from dmlg import WriterEnvironment, WriterAgent, AgentBuilder
+from dmlg import WriterEnvironment, WriterAgent, AgentBuilder, 
 
-MODEL_NAME = "alice"
+MODEL_NAME = "mix1"
 INPUT_PREFIX = "base"
 OUTPUT_PREFIX = "bias"
-HIDDEN_SIZE = 768
+HIDDEN_SIZE = 256
 EPOCHS = 2000
 
 # Main

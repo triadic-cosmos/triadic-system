@@ -4,7 +4,7 @@ from typing import List
 
 from .tokens import Token, HISTORY_TOKENS, TRACKER_TOKENS
 from .narrative_memory import NarrativeMemory
-from .config import Configuration
+from .config import Configuration, SENTENCE_BASED
 
 HISTORY_BLACKLIST = {
     # Copulas 
@@ -136,7 +136,7 @@ class ContextWindow:
         
     def __post_init__(self):
         self._cas_vector = []
-        
+
         self._token_histories = []
         self._token_histories_start = [] 
         for i in range(len(self.configuration.history_size)):
@@ -145,10 +145,15 @@ class ContextWindow:
             self._token_histories.append(TokenHistory(dimension, alpha))
             self._token_histories_start.append(TokenHistory(dimension, alpha))
 
+        self._entity_tracker = EntityTracker(self.tracking, self.configuration.tracker_alpha)
+
+        if SENTENCE_BASED:
+            self._sentence_prediction = None
+            self._sentence_memory = [0] * self.configuration.narrative_sentences \
+                                        * self.configuration.lemma_output_dimension
+        
         self._narrative_memory = NarrativeMemory(self.lemma_embedding_dict, self.configuration)
         self._narrative_memory_embedding = None
-
-        self._entity_tracker = EntityTracker(self.tracking, self.configuration.tracker_alpha)
 
         self._current_tokens = []
         self._current_sentence = CurrentSentence(
@@ -156,6 +161,7 @@ class ContextWindow:
             self.configuration.position_divider,
             self.configuration.last_embeddings,
             self.configuration.last_embedding_size)
+
         self.clear_current_sentence()
 
     def clear_current_sentence(self):
@@ -168,7 +174,7 @@ class ContextWindow:
         self._last_token = Token.EOL
         self._forelast_token = Token.EOL
         self._last_lemma = Token.EOL
-
+        
     def start_sentence(self):
         for i in range(len(self._token_histories)):
             self._token_histories_start[i] = self._token_histories[i].copy()
@@ -207,7 +213,11 @@ class ContextWindow:
                     emb = self.lemma_embedding_dict.get_input_embedding(token).embedding
                     for token_history in self._token_histories:
                         token_history.add(emb)
-                                
+    
+    def update_sentence_memory(self, vector: List[float]):
+        self._sentence_memory = vector + self._sentence_memory[:-len(vector)]
+        self._sentence_prediction = None
+    
     def update_narrative_memory(self, tokens: List[Token]):
         self._narrative_memory.update_from_sentence(tokens)
         self._narrative_memory_embedding = None
@@ -223,7 +233,7 @@ class ContextWindow:
             ctx._token_histories_start[i] = self._token_histories_start[i]                                                            
 
         ctx._cas_vector = self._cas_vector
-    
+
         ctx._current_tokens = self._current_tokens.copy()        
         ctx._current_sentence = self._current_sentence.copy()
         ctx._last_token = self._last_token
@@ -234,11 +244,23 @@ class ContextWindow:
     def copy_full(self) -> "ContextWindow":
         ctx = self.copy_current()
         ctx._entity_tracker = self._entity_tracker.copy()
+        
+        if SENTENCE_BASED:
+            ctx._sentence_memory = self._sentence_memory.copy()
+        
         ctx._narrative_memory = self._narrative_memory.copy()
+        
         return ctx
+    
+    def set_sentence_prediction(self, pred):
+        self._sentence_prediction = pred
     
     def set_cas_vector(self, cas_vector: List[float]):
         self._cas_vector = cas_vector
+    
+    @property
+    def sentence_prediction(self):
+        return self._sentence_prediction
     
     @property
     def cas_vector(self) -> List[float]:
@@ -248,18 +270,25 @@ class ContextWindow:
     def current_tokens(self) -> List[Token]:
         return self._current_tokens
             
-    def get_current_embedding(self) -> List[float]:        
-        return self._current_sentence.get()
+    def get_current_embedding(self) -> List[float]:
+        if SENTENCE_BASED:
+            return []
+        else:
+            return self._current_sentence.get()
 
     def get_narrative_memory_embedding(self) -> List[float]:
         if self._narrative_memory_embedding == None:
             self._narrative_memory_embedding = self._narrative_memory.get_state()
+        if SENTENCE_BASED:
+            return self._sentence_memory + self._narrative_memory_embedding
         return self._narrative_memory_embedding
     
     def get_entity_tracker_embedding(self) -> List[float]:
         return self._entity_tracker.get_state()
     
     def get_token_history_embedding(self) -> List[float]:
+        if SENTENCE_BASED:
+            return []
         embedding = []
         for token_history in self._token_histories:
             embedding += token_history.get() 

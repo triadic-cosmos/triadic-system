@@ -2,10 +2,11 @@
 from dataclasses import dataclass, field
 from typing import List, Set
 
-from .tokens import Token
+from .tokens import Token, TargetToken
 
 @dataclass
 class WriterSentence:
+    target_tokens: List[TargetToken]
     tokens: List[Token]
     natural: str
     fixed: str = field(init=False)
@@ -68,3 +69,5 @@ class WriterParams:
     top_boost = [1.3, 1.2, 1.1] # score boost for top tokens
     enable_paging = True # use graph or pure MLP mode
     max_pageless_vocab = 2048 # maximum random subset of vocab to use for MLP mode
+    sentence_chapter_threshold = -0.65 # threshold for start of new chapter
+    sentence_paragraph_threshold = -0.92 # threshold for start of new paragraph
