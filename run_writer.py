@@ -4,15 +4,15 @@ from dmlg import WriterParams
 
 import time
 
-MODEL = "mix1"
+MODEL = "mini"
 PREFIXES = ["base"]
 
-NUM_LINES = 2000
+NUM_LINES = 1000
 MAX_CHAPTERS = 1000
 BEAM_SEARCH = False
 LEMMA_BLACKLIST = {"mr", "dr"}
 PROMPT = []
-CAS_VECTOR = [0,1,1,1,0,0.5,0.5,0.5,0,0]
+CAS_VECTOR = [0.8,0.2,1,0.9,0.5]
 KEYWORDS = {}
 
 # Generation main using keywords, prompt and beam search

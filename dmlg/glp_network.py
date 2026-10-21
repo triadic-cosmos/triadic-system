@@ -82,18 +82,6 @@ class GlpNetwork:
             emb_obj = self.lemma_embedding_dict.get_output_embedding(s.target)
             emb_obj.update(embedding_pred.tolist(), alpha)
 
-    def _update_lemma_embeddings_after_sentence(self, sample: TrainingSampleSentence):
-        alpha: float = self.configuration.learn_alpha
-        
-        x = torch.tensor([sample.input_vector], dtype=torch.float32)
-        with torch.no_grad():
-            pred = self.glp_network(x).squeeze(0)
-            embedding_pred = F.normalize(pred, p=2, dim=0)
-            
-            for target in sample.targets:
-                emb_obj = self.lemma_embedding_dict.get_output_embedding(target)
-                emb_obj.update(embedding_pred.tolist(), alpha)
-
     # ------------------------------------------------------------
     # Token Learning
     # ------------------------------------------------------------
@@ -163,8 +151,6 @@ class GlpNetwork:
         if sample:
             self._learn_glp_sentence(sample)
             
-            self._update_lemma_embeddings_after_sentence(sample)
-
     # ------------------------------------------------------------
     # Sample Learning
     # ------------------------------------------------------------

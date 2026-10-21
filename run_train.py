@@ -2,11 +2,11 @@ from engine.triadic_trainer import TriadicTrainer
 
 import time
 
-MODEL = "mix1"
+MODEL = "mini"
 EPOCHS = [10000]
-MAX_EPOCHS = 200000
-CAS_VECTOR_SIZE = 10
-PREFIXES = ["base"]
+MAX_EPOCHS = 30000
+CAS_VECTOR_SIZE = 5
+PREFIXES = ["no_alpha"]
 
 # Training a dataset model with epoch variants
 trainer: TriadicTrainer = TriadicTrainer()

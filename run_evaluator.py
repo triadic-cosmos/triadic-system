@@ -6,8 +6,8 @@ from dmlg import DATA_FOLDER
 
 import time
 
-DATASET_NAME = "mix1"
-BOOK_PREFIX = "base"
+DATASET_NAME = "mini"
+BOOK_PREFIX = "base2"
 DATASET_FOLDER = DATA_FOLDER + DATASET_NAME + "/"
 BOOK_FILENAME = DATASET_FOLDER + "output/" + BOOK_PREFIX + "_output.txt"
 EVALUATION_FILENAME = DATASET_FOLDER + "evaluation/" + BOOK_PREFIX + "_evaluation.txt"

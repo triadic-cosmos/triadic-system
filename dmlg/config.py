@@ -11,10 +11,10 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 640
-    other_hidden_size: int = 640
+    first_hidden_size: int = 256
+    other_hidden_size: int = 256
     lemma_input_dimension: int = 32
-    lemma_output_dimension: int = 72
+    lemma_output_dimension: int = 64
     total_pages: int = 1000000
     max_page_input_size: int = 1
     
@@ -31,7 +31,7 @@ class Configuration:
     narrative_hidden_size: int = 64
     narrative_token_size: int = 8
     
-    tracker_entities: int = 418
+    tracker_entities: int = 814
     tracker_alpha: float = 0.98
 
     # not used for sentence based
@@ -39,7 +39,7 @@ class Configuration:
     history_size = []
     history_alpha = []
     
-    last_embeddings: int = 5
+    last_embeddings: int = 3
     last_embedding_size: int = 16
 
     # ------------------------------------------------------------
