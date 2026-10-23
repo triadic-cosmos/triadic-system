@@ -7,7 +7,7 @@ import random
 import torch
 import torch.nn.functional as F
 
-from .config import Configuration, SENTENCE_BASED
+from .config import Configuration
 from .tokens import (
     Token,
     TargetToken,
@@ -57,10 +57,10 @@ class GlpNetwork:
         self.lemma_embedding_dict = self.create_lemma_embedding_dictionary()        
         self.grammar_tokens = [self.token_dictionary.map[text] for text in GRAMMAR_TOKENS]
         
-        if SENTENCE_BASED:
-            self.matrices = []
-            for _ in range(self.configuration.matrix_positions):
-                self.matrices.append(torch.eye(self.configuration.lemma_output_dimension))
+        # projection matrices
+        self.matrices = []
+        for _ in range(self.configuration.matrix_positions):
+            self.matrices.append(torch.eye(self.configuration.lemma_output_dimension))
 
     # ------------------------------------------------------------
     # Embedding Learning
@@ -90,7 +90,7 @@ class GlpNetwork:
     # Token Learning
     # ------------------------------------------------------------
     
-    def learn(self, model_input: ModelInput, target: Token, batch: TrainingBatch):
+    def learn(self, model_input: ModelInput, target: Token, position: int, batch: TrainingBatch):
         # TERMINAL GRAMMAR CASE
         if target.is_terminal():
             grammar_tok = target
@@ -139,7 +139,8 @@ class GlpNetwork:
         sample = TrainingSample(
             input_vector=self.encoder.encode(model_input),
             target=tt,
-            page_index=page_index
+            page_index=page_index,
+            position=position
         )
         batch.samples.append(sample)
 
@@ -176,6 +177,7 @@ class GlpNetwork:
         4. Normalize the target embedding (unit vector).
         5. Compute cosine similarity loss: 1 - cos(pred, target).
         6. Backpropagate and update the GLP network parameters.
+        7. Optimize the positional projection matrices.
 
         This is a stable, convex-like objective that works extremely well for
         sentence-level semantic learning.
@@ -202,16 +204,19 @@ class GlpNetwork:
         loss.backward()
         self.glp_network.opt.step()
         
-        # 7. Optimize the global projection matrix using Hebbian learning
+        # 7. Optimize the positional projection matrices using Hebbian learning
         for pos, token in enumerate(sample.targets):
+            if pos >= self.configuration.matrix_positions:
+                break
             embedding = self.lemma_embedding_dict.get_output_embedding(token).embedding
             t = torch.tensor([embedding], dtype=torch.float32)
             t = F.normalize(t, p=2, dim=1) 
             delta_matrix = self.configuration.matrix_learning_rate * \
                 torch.outer(pred.squeeze(), t.squeeze())
-            p = -1 if pos >= self.configuration.matrix_positions else pos 
-            self.matrices[p] = self.matrices[p] * self.configuration.matrix_decay + delta_matrix
-            
+            with torch.no_grad():
+                self.matrices[pos] = (delta_matrix +
+                    self.matrices[pos] * self.configuration.matrix_decay).detach()
+    
     def _learn_glp(self, samples: List[TrainingSample]):
         # Input batch
         xs = torch.tensor([s.input_vector for s in samples], dtype=torch.float32)
@@ -239,6 +244,24 @@ class GlpNetwork:
         loss.backward()
         self.glp_network.opt.step()
 
+        # Optimize the positional projection matrices using Hebbian learning
+        for sample in samples:
+            p = sample.position
+            if p < self.configuration.matrix_positions:
+                xs = torch.tensor([sample.input_vector], dtype=torch.float32)
+                pred = self.glp_network(xs)
+                pred = F.normalize(pred, p=2, dim=1)
+                
+                embedding = self.lemma_embedding_dict.get_output_embedding(sample.target).embedding
+                target = torch.tensor([embedding], dtype=torch.float32)
+                target = F.normalize(target, p=2, dim=1)
+                
+                delta_matrix = self.configuration.matrix_learning_rate * \
+                    torch.outer(pred.squeeze(), target.squeeze())
+                with torch.no_grad():
+                    self.matrices[p] = (delta_matrix + \
+                        self.matrices[p] * self.configuration.matrix_decay).detach()
+
     # ------------------------------------------------------------
     # Inference
     # ------------------------------------------------------------
@@ -254,14 +277,15 @@ class GlpNetwork:
             with torch.no_grad():
                 pred = self.glp_network(x).squeeze(0)
             lemma_pred = F.normalize(pred, p=2, dim=0)
-            if SENTENCE_BASED:
+            if self.configuration.sentence_based:
                 model_input.window.set_sentence_prediction(lemma_pred)
                 
-        # project using position matrix for sentence vector
-        if SENTENCE_BASED:
-            p = min(model_input.window.position, self.configuration.matrix_positions - 1)
-            lemma_pred = (lemma_pred @ self.matrices[p]).detach()
-            lemma_pred = F.normalize(lemma_pred, p=2, dim=0)            
+        # project using position matrix
+        if params.use_matrix:
+            p = model_input.window.position
+            if p < self.configuration.matrix_positions:
+                lemma_pred = lemma_pred @ self.matrices[p]
+                lemma_pred = F.normalize(lemma_pred, p=2, dim=0)
         
         # Determine incompatible tokens
         min_tokens = params.min_words * 2

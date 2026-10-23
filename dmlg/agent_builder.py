@@ -7,7 +7,7 @@ from typing import List
 
 from .grammar import GrammarEngine
 from .semantic import SemanticEngine
-from .config import Configuration, SENTENCE_BASED
+from .config import Configuration
 from .context import ContextWindow
 from .writer_story import WriterParams
 from .writer_agent import WriterAgent, ModelInput
@@ -39,27 +39,29 @@ class TrainingBatchBuilder:
         model_input = ModelInput(context, line_position, True, True)
             
         # 2. train for each token
-        for tok in sentence.tokens:
+        for pos, tok in enumerate(sentence.tokens):
             target = self.agent.token_dictionary.add_and_get(tok.text)
             if not target.is_eol(): # do not learn EOL as transition
-                self.agent.glp_network.learn(model_input, target, sentence.batch)
+                self.agent.glp_network.learn(model_input, target, pos, sentence.batch)
                 context.add_token(target)
-
+        
         # 3. context / narrative for each sentence
         self.update_context(sentence, context)
 
         # 4. convert batch to sentence
-        if SENTENCE_BASED:
-            input_vector = sentence.batch.samples[0].input_vector
-            targets = [sample.target for sample in sentence.batch.samples]
-            target_vector = self.agent.glp_network.lemma_embedding_dict.get_sentence_embedding(targets)
+        input_vector = sentence.batch.samples[0].input_vector
+        targets = [sample.target for sample in sentence.batch.samples]
+        target_vector = self.agent.glp_network.lemma_embedding_dict.get_sentence_embedding(targets)
+        context.update_sentence_memory(target_vector)
+        
+        # replace batch token samples with sentence sample
+        if self.agent.configuration.sentence_based:
             sentence.batch = None
             sentence.sample = TrainingSampleSentence(input_vector, targets, target_vector)
-            context.update_sentence_memory(target_vector)
-        else:
+        else:            
             # log statistics for batch
-            sentence.batch.show(index)        
-
+            sentence.batch.show(index)
+                        
     def build_curriculum(self, curriculum_list: List[Curriculum], cas_vector_size: int = 0) -> Curriculum:
         combined_curriculum = Curriculum()
         total_samples: int = 0
@@ -81,7 +83,7 @@ class TrainingBatchBuilder:
                     paragraph_line = 0
                 line_position = [line / last_line, paragraph_line / paragraph_divider]                                
                 self.build_sentence(line, sentence, line_position, context)
-                if SENTENCE_BASED:
+                if self.agent.configuration.sentence_based:
                     total_samples += len(sentence.sample.targets)
                 else:
                     total_samples += len(sentence.batch.samples)

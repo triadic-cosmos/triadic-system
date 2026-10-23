@@ -8,13 +8,13 @@ from dmlg import WriterParams, DATA_FOLDER
 MODEL = "mini"
 MODEL_PREFIX = "base"
 DATASET_FOLDER = DATA_FOLDER + MODEL
-PREFIXES = ["run3", "run4"]
+PREFIXES = ["run4", "run5"]
 MAX_CHAPTERS = 1000
 MAX_RETRIES = 3
 NUM_LINES = 2000
 ITERATIVE = True
 LEMMA_BLACKLIST = {"mr", "dr"}
-CAS_VECTORS = [[0.9,0.2,0.8,1.0,0.5], [0.0,1.5,0.5,0.3,1.0]]
+CAS_VECTORS = [[0.0,1.5,0.5,0.3,1.0], [0.9,0.2,0.8,1.0,0.5]]
 
 # Main
 llm: TriadicLLM = TriadicLLM()

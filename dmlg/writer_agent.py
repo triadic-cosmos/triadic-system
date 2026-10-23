@@ -8,7 +8,7 @@ import random
 import pickle
 import math
 
-from .config import Configuration, SENTENCE_BASED
+from .config import Configuration
 from .writer_environment import WriterEnvironment
 from .writer_story import WriterStory, WriterSentence, WriterParams
 from .tokens import Token, TokenDictionary, TokenLogit, TargetToken
@@ -87,7 +87,7 @@ class WriterAgent:
             return batch
 
     def train_curriculum(self, curriculum: Curriculum, random_epochs: int):
-        if SENTENCE_BASED:
+        if self.configuration.sentence_based:
             # Do sentence based training        
             for epoch in range(1, random_epochs + 1):
                 sentence: CurriculumSentence = curriculum.get_random_sentence(self.rng)
@@ -125,11 +125,13 @@ class WriterAgent:
         print(f"training count = {self.training_count}")
         print(f"input size = {self.configuration.generator_input_size()}")
         print(f"page count = {len(self.glp_network.page_list)}")
-        if SENTENCE_BASED:
-            print("matrix = ", end = "")
-            for matrix in self.glp_network.matrices:
-                print(f"{torch.max(matrix):.3f}", end = " ")
-            print()
+        
+        # show projection matrices maximum element
+        print("matrix = ", end = "")
+        for matrix in self.glp_network.matrices:
+            print(f"{torch.max(matrix):.3f}", end = " ")
+        print()
+        
         if full:
             sizes = []
             for page in self.glp_network.page_list:
@@ -226,8 +228,7 @@ class WriterAgent:
             if proposal is None:
                 break
 
-            if SENTENCE_BASED:
-                generated_targets.append(TargetToken(proposal.grammar, proposal.lemma))
+            generated_targets.append(TargetToken(proposal.grammar, proposal.lemma))
 
             # --- 1. ALWAYS append grammar token ---
             grammar_tok = self.token_dictionary.add_and_get(proposal.grammar.text)
@@ -402,17 +403,13 @@ class WriterAgent:
                     print(f"<{fixed}")                
                     print(f">{grammar_fixed}")
     
-    def update_context_tokens(self, ctx: ContextWindow, tokens: List[Token]):
-        ctx.start_sentence()
-        ctx.update_narrative_memory(tokens)
-        ctx.update_entity_tracking(tokens)
-            
     def update_context(self, ctx: ContextWindow, sentence: WriterSentence):
-        self.update_context_tokens(ctx, sentence.tokens)
+        ctx.start_sentence()
+        ctx.update_narrative_memory(sentence.tokens)
+        ctx.update_entity_tracking(sentence.tokens)
         
-        if SENTENCE_BASED:
-            sentence_vector = self.glp_network.lemma_embedding_dict.get_sentence_embedding(sentence.target_tokens)
-            ctx.update_sentence_memory(sentence_vector)
+        sentence_vector = self.glp_network.lemma_embedding_dict.get_sentence_embedding(sentence.target_tokens)
+        ctx.update_sentence_memory(sentence_vector)
 
     def write_chapter(self, line_nr: int, max_lines: int, ctx: ContextWindow, params: WriterParams) -> WriterStory:
         chapter_lines = 0
@@ -539,16 +536,20 @@ class WriterAgent:
             line_nr += 1
             if line_nr == lines:
                 break            
-            if sentence.tokens[0].text == Token.SOC.text:
+            if sentence.tokens[0].text == Token.SOC.text or \
+               chapter_lines >= params.max_lines_chapter:
                 chapter_lines = 0
                 paragraph_lines = 0
                 chapters += 1
-                if line_nr + params.min_lines_chapter > lines:
+                if line_nr + params.min_lines_chapter > lines or \
+                   chapters >= params.max_chapters:
                     # remove the new chapter
                     writer_sentences.pop()
                     break
-                if chapters >= params.max_chapters: 
-                    break
+                if sentence.tokens[0].text != Token.SOC.text:
+                    sentence.target_tokens.insert(0, TargetToken(Token.SOC, Token.SOC))
+                    sentence.tokens.insert(0, Token.SOC)
+                    sentence.natural = "$ " + sentence.natural
             elif sentence.tokens[0].text == Token.SOP.text:
                 chapter_lines += 1
                 paragraph_lines = 0

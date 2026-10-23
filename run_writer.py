@@ -13,6 +13,7 @@ BEAM_SEARCH = False
 LEMMA_BLACKLIST = {"mr", "dr"}
 PROMPT = []
 CAS_VECTOR = [0.9,0.2,0.8,1.0,0.5]
+USE_MATRIX = True
 KEYWORDS = {}
 
 # Generation main using keywords, prompt and beam search
@@ -29,7 +30,8 @@ for prefix in PREFIXES:
         keywords = KEYWORDS,
         beam_search = BEAM_SEARCH,
         lemma_blacklist = LEMMA_BLACKLIST,
-        cas_vector = CAS_VECTOR        
+        cas_vector = CAS_VECTOR,
+        use_matrix = USE_MATRIX
     )
     writer.write(params)
 

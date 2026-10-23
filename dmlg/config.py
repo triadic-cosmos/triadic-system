@@ -2,8 +2,6 @@
 from dataclasses import dataclass, field
 from typing import List
 
-SENTENCE_BASED = True
-
 @dataclass
 class Configuration:
     name: str
@@ -11,20 +9,19 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 512
-    other_hidden_size: int = 256
-    lemma_input_dimension: int = 32
+    first_hidden_size: int = 768
+    other_hidden_size: int = 384
+    lemma_input_dimension: int = 64
     lemma_output_dimension: int = 64
     total_pages: int = 1000000
     max_page_input_size: int = 1
+    sentence_based: bool = False
     
     # ------------------------------------------------------------
     # Context parameters
     # ------------------------------------------------------------
     position_divider = 30
     paragraph_divider = 50
-
-    # sentence based input size: 20 x (32 + 72) + 418 + 2 = 2500
     
     narrative_sentences: int = 20
     narrative_state_size: int = 32
@@ -34,10 +31,10 @@ class Configuration:
     tracker_entities: int = 814
     tracker_alpha: float = 0.98
 
-    # not used for sentence based
+    # not used for sentence based mode
     
-    history_size = []
-    history_alpha = []
+    history_size = [32, 48, 64]
+    history_alpha = [0.92, 0.95, 0.98]
     
     last_embeddings: int = 15
     last_embedding_size: int = 16
@@ -57,7 +54,7 @@ class Configuration:
     epochs_step: int = 10
     show_epochs_step: int = 100
     
-    matrix_positions: int = 8
+    matrix_positions: int = 10
     matrix_decay: float = 0.99999
     matrix_learning_rate: float = 0.001
     
@@ -84,14 +81,14 @@ class Configuration:
         # line position (1) + paragraph position (1) = 2
         
         # sentence based encoding
-        if SENTENCE_BASED:
+        if self.sentence_based:
             return self.narrative_sentences * self.lemma_output_dimension + \
                    self.tracker_entities + \
                    self.get_cas_vector_size() + 2
         
         # token based encoding
         return self.generator_current_context_size() + \
-               self.narrative_state_size * self.narrative_sentences + \
+               self.narrative_sentences * self.lemma_output_dimension + \
                self.tracker_entities + \
                sum(self.history_size) + \
                self.get_cas_vector_size() + 2 

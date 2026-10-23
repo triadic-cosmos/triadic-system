@@ -4,7 +4,7 @@ from typing import List
 
 from .tokens import Token, HISTORY_TOKENS, TRACKER_TOKENS
 from .narrative_memory import NarrativeMemory
-from .config import Configuration, SENTENCE_BASED
+from .config import Configuration
 
 HISTORY_BLACKLIST = {
     # Copulas 
@@ -147,10 +147,9 @@ class ContextWindow:
 
         self._entity_tracker = EntityTracker(self.tracking, self.configuration.tracker_alpha)
 
-        if SENTENCE_BASED:
-            self._sentence_prediction = None
-            self._sentence_memory = [0] * self.configuration.narrative_sentences \
-                                        * self.configuration.lemma_output_dimension
+        self._sentence_prediction = None
+        self._sentence_memory = [0] * self.configuration.narrative_sentences \
+                                    * self.configuration.lemma_output_dimension
         
         self._narrative_memory = NarrativeMemory(self.lemma_embedding_dict, self.configuration)
         self._narrative_memory_embedding = None
@@ -245,9 +244,7 @@ class ContextWindow:
         ctx = self.copy_current()
         ctx._entity_tracker = self._entity_tracker.copy()
         
-        if SENTENCE_BASED:
-            ctx._sentence_memory = self._sentence_memory.copy()
-        
+        ctx._sentence_memory = self._sentence_memory.copy()
         ctx._narrative_memory = self._narrative_memory.copy()
         
         return ctx
@@ -275,15 +272,15 @@ class ContextWindow:
         return self._current_tokens
             
     def get_current_embedding(self) -> List[float]:
-        if SENTENCE_BASED:
+        if self.configuration.sentence_based:
             return []
         else:
             return self._current_sentence.get()
-
-    def get_narrative_memory_embedding(self) -> List[float]:
-        if SENTENCE_BASED:
-            return self._sentence_memory
         
+    def get_sentence_memory_embedding(self) -> List[float]:
+        return self._sentence_memory
+        
+    def get_narrative_memory_embedding(self) -> List[float]:
         if self._narrative_memory_embedding == None:
             self._narrative_memory_embedding = self._narrative_memory.get_state()
         return self._narrative_memory_embedding
@@ -292,7 +289,7 @@ class ContextWindow:
         return self._entity_tracker.get_state()
     
     def get_token_history_embedding(self) -> List[float]:
-        if SENTENCE_BASED:
+        if self.configuration.sentence_based:
             return []
         embedding = []
         for token_history in self._token_histories:
@@ -318,7 +315,8 @@ class ModelInput:
 class InputEncoder:
     def encode(self, model_input: ModelInput) -> List[float]:
         current_embedding = model_input.window.get_current_embedding()
-        narrative_embedding = model_input.window.get_narrative_memory_embedding()
+        sentence_embedding = model_input.window.get_sentence_memory_embedding()
+        # narrative_embedding = model_input.window.get_narrative_memory_embedding()        
         entity_embedding = model_input.window.get_entity_tracker_embedding()
         token_history = model_input.window.get_token_history_embedding()
         line_position = model_input.line_position
@@ -326,7 +324,7 @@ class InputEncoder:
 
         return (
             current_embedding
-            + narrative_embedding
+            + sentence_embedding
             + entity_embedding
             + token_history
             + line_position

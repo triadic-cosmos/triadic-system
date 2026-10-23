@@ -18,6 +18,7 @@ class TrainingSample:
     input_vector: List[float]
     target: TargetToken      # grammar + lemma
     page_index: int          # -1 for terminals
+    position: int
 
 # ============================================================
 # TrainingSampleSentence
