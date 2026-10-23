@@ -12,7 +12,7 @@ MAX_CHAPTERS = 1000
 BEAM_SEARCH = False
 LEMMA_BLACKLIST = {"mr", "dr"}
 PROMPT = []
-CAS_VECTOR = [0.8,0.2,1,0.9,0.5]
+CAS_VECTOR = [0.9,0.2,0.8,1.0,0.5]
 KEYWORDS = {}
 
 # Generation main using keywords, prompt and beam search

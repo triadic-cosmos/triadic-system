@@ -259,6 +259,10 @@ class ContextWindow:
         self._cas_vector = cas_vector
     
     @property
+    def position(self) -> int:
+        return self._current_sentence.position
+    
+    @property
     def sentence_prediction(self):
         return self._sentence_prediction
     
@@ -277,10 +281,11 @@ class ContextWindow:
             return self._current_sentence.get()
 
     def get_narrative_memory_embedding(self) -> List[float]:
+        if SENTENCE_BASED:
+            return self._sentence_memory
+        
         if self._narrative_memory_embedding == None:
             self._narrative_memory_embedding = self._narrative_memory.get_state()
-        if SENTENCE_BASED:
-            return self._sentence_memory + self._narrative_memory_embedding
         return self._narrative_memory_embedding
     
     def get_entity_tracker_embedding(self) -> List[float]:

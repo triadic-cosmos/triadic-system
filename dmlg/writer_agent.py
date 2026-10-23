@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import List, Set, Dict, Optional
 from collections import defaultdict
 
+import torch
 import random
 import pickle
 import math
@@ -93,7 +94,7 @@ class WriterAgent:
                 sample: TrainingSampleSentence = sentence.sample
                 self.learn_sentence(sample)               
                 if epoch % self.configuration.show_epochs_step == 0:
-                    print(epoch)
+                    print(f"{epoch}")
         else:
             # Do token based training
             super_batch: TrainingBatch = TrainingBatch()
@@ -124,6 +125,11 @@ class WriterAgent:
         print(f"training count = {self.training_count}")
         print(f"input size = {self.configuration.generator_input_size()}")
         print(f"page count = {len(self.glp_network.page_list)}")
+        if SENTENCE_BASED:
+            print("matrix = ", end = "")
+            for matrix in self.glp_network.matrices:
+                print(f"{torch.max(matrix):.3f}", end = " ")
+            print()
         if full:
             sizes = []
             for page in self.glp_network.page_list:

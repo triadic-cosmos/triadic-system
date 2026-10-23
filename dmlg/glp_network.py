@@ -15,8 +15,7 @@ from .tokens import (
     TokenLogit,
     TokenPage,
     LemmaEmbeddingDictionary,
-    GRAMMAR_TOKENS,
-    STRUCTURE_LENGTH
+    GRAMMAR_TOKENS
 )
 from .writer_story import WriterParams
 from .context import ModelInput, InputEncoder
@@ -57,6 +56,11 @@ class GlpNetwork:
 
         self.lemma_embedding_dict = self.create_lemma_embedding_dictionary()        
         self.grammar_tokens = [self.token_dictionary.map[text] for text in GRAMMAR_TOKENS]
+        
+        if SENTENCE_BASED:
+            self.matrices = []
+            for _ in range(self.configuration.matrix_positions):
+                self.matrices.append(torch.eye(self.configuration.lemma_output_dimension))
 
     # ------------------------------------------------------------
     # Embedding Learning
@@ -197,7 +201,17 @@ class GlpNetwork:
         self.glp_network.opt.zero_grad()
         loss.backward()
         self.glp_network.opt.step()
-
+        
+        # 7. Optimize the global projection matrix using Hebbian learning
+        for pos, token in enumerate(sample.targets):
+            embedding = self.lemma_embedding_dict.get_output_embedding(token).embedding
+            t = torch.tensor([embedding], dtype=torch.float32)
+            t = F.normalize(t, p=2, dim=1) 
+            delta_matrix = self.configuration.matrix_learning_rate * \
+                torch.outer(pred.squeeze(), t.squeeze())
+            p = -1 if pos >= self.configuration.matrix_positions else pos 
+            self.matrices[p] = self.matrices[p] * self.configuration.matrix_decay + delta_matrix
+            
     def _learn_glp(self, samples: List[TrainingSample]):
         # Input batch
         xs = torch.tensor([s.input_vector for s in samples], dtype=torch.float32)
@@ -242,16 +256,12 @@ class GlpNetwork:
             lemma_pred = F.normalize(pred, p=2, dim=0)
             if SENTENCE_BASED:
                 model_input.window.set_sentence_prediction(lemma_pred)
-
-        # Use structural information in sentence vector
-        if SENTENCE_BASED and model_input.window.last_token().is_eol():
-            structure = lemma_pred.numpy()[0]
-            if structure > params.sentence_chapter_threshold and model_input.allow_chapter:
-                print("C", end = "")
-                return [TokenLogit(Token.SOC, Token.SOC, 1.0)]
-            if structure > params.sentence_paragraph_threshold and model_input.allow_paragraph:
-                print("P", end = "")
-                return [TokenLogit(Token.SOP, Token.SOP, 1.0)]
+                
+        # project using position matrix for sentence vector
+        if SENTENCE_BASED:
+            p = min(model_input.window.position, self.configuration.matrix_positions - 1)
+            lemma_pred = (lemma_pred @ self.matrices[p]).detach()
+            lemma_pred = F.normalize(lemma_pred, p=2, dim=0)            
         
         # Determine incompatible tokens
         min_tokens = params.min_words * 2

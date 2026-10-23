@@ -11,7 +11,7 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 256
+    first_hidden_size: int = 512
     other_hidden_size: int = 256
     lemma_input_dimension: int = 32
     lemma_output_dimension: int = 64
@@ -39,7 +39,7 @@ class Configuration:
     history_size = []
     history_alpha = []
     
-    last_embeddings: int = 3
+    last_embeddings: int = 15
     last_embedding_size: int = 16
 
     # ------------------------------------------------------------
@@ -56,6 +56,10 @@ class Configuration:
     random_epochs: int = 1000
     epochs_step: int = 10
     show_epochs_step: int = 100
+    
+    matrix_positions: int = 8
+    matrix_decay: float = 0.99999
+    matrix_learning_rate: float = 0.001
     
     # ------------------------------------------------------------
     # Derived sizes
@@ -82,7 +86,6 @@ class Configuration:
         # sentence based encoding
         if SENTENCE_BASED:
             return self.narrative_sentences * self.lemma_output_dimension + \
-                   self.narrative_state_size * self.narrative_sentences + \
                    self.tracker_entities + \
                    self.get_cas_vector_size() + 2
         

@@ -84,11 +84,6 @@ ALL_PUNCTIATION_TOKENS = {
     "<COMMA>"
 }
 
-CHAPTER_VECTOR = [1.0]
-PARAGRAPH_VECTOR = [0.0]
-DEFAULT_VECTOR = [-1.0]
-STRUCTURE_LENGTH = len(DEFAULT_VECTOR)
-
 # ============================================================
 # Token (symbolic only)
 # ============================================================
@@ -454,7 +449,7 @@ class LemmaEmbeddingDictionary:
         if embedding:
             return embedding
         # create only the semantic embedding without 4 structural dimensions
-        embedding = LearnedTokenEmbedding.create_from_id(key, self.output_dimension - STRUCTURE_LENGTH)
+        embedding = LearnedTokenEmbedding.create_from_id(key, self.output_dimension)
         self.fixed_output_embeddings[key] = embedding
         return embedding
 
@@ -505,11 +500,4 @@ class LemmaEmbeddingDictionary:
 
         # Normalize again → final cosine-optimized sentence embedding
         final_vec = mean_vec / (np.linalg.norm(mean_vec) + 1e-8)
-        semantic = final_vec.tolist()
-
-        if chapter:
-            return CHAPTER_VECTOR + semantic
-        elif paragraph:
-            return PARAGRAPH_VECTOR + semantic
-        else:
-            return DEFAULT_VECTOR + semantic
+        return final_vec.tolist()
