@@ -56,7 +56,12 @@ class TrackerMap:
                         entity.amount += 1
                     grammar = None
 
-        print(f"entities = {len(self.entities)}")
+        # count entities based on minimum occurrence
+        amount = 0
+        for k in self.entities:
+            if self.entities[k].amount >= self.config.entity_min_count:
+                amount += 1
+        print(f"filtered entities = {amount} of {len(self.entities)}")
 
     def partition_entities(self):
         keys = sorted(self.entities, key=lambda k: self.entities[k].score(), reverse=True)

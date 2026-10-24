@@ -28,7 +28,7 @@ class Configuration:
     narrative_hidden_size: int = 64
     narrative_token_size: int = 8
     
-    tracker_entities: int = 814
+    tracker_entities: int = 585
     tracker_alpha: float = 0.98
 
     # not used for sentence based mode
@@ -45,6 +45,7 @@ class Configuration:
     no_roundtrip: bool = True
     max_sentences: int = 100000
     min_sentence_length: int = 10
+    entity_min_count: int = 3
 
     # ------------------------------------------------------------
     # Training parameters
