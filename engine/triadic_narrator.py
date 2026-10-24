@@ -62,7 +62,7 @@ class TriadicNarratorParams:
     min_score: int = 85
     min_transition_score: int = 90
     max_retries: int = 15
-    max_lines: int = 50
+    max_lines: int = 40
     max_tokens: int = 5000
 
 # Narrator book chapter

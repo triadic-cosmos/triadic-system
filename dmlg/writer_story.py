@@ -46,7 +46,7 @@ class WriterParams:
     amount: int = 1 # number of books
     lines: int = 1000 # lines per book
     min_lines_chapter: int = 20 # minimum lines per chapter
-    max_lines_chapter: int = 50 # maximum lines per chapter    
+    max_lines_chapter: int = 40 # maximum lines per chapter    
     min_lines_paragraph: int = 3 # minimum lines per paragraph
     min_words: int = 6 # minimum words per sentence
     max_words: int = 25 # maximum words per sentence
