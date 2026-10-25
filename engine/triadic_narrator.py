@@ -25,6 +25,30 @@ FIX_PROMPT = (
 "This is the chapter: "
 )
 
+SUMMARY_PROMPT = (
+"Transform the following draft book chapter into a detailed writing prompt. "
+"Preserve all important plot points, character interactions, themes, "
+"discoveries, conflicts and emotional developments. "
+"The resulting prompt must contain sufficient information to allow "
+"a new chapter to be written without access to the original draft. "
+"Do not summarize for a reader. "
+"Create a specification for an author. "
+"Avoid parentheses or other formatting symbols. "
+"This are some general world guidelines. $WORLD "
+"End the prompt with a line containing: The End. "
+"This is the chapter title: '$TITLE'. "
+"This is the chapter: "
+)
+
+WRITE_PROMPT = (
+"Transform the following prompt into a very high quality book chapter. "
+"Make it a literary masterpiece. "
+"Avoid parentheses or other formatting symbols. "
+"Do not add a chapter title! "
+"End the chapter with a line containing: The End. "
+"This is the prompt: "
+)
+
 CHECK_PROMPT = (
 "Check if the second chapter is a natural continuation of the first chapter. "
 "Assume these should be two consecutive chapters in a real book. "
@@ -55,13 +79,17 @@ BRIDGE_PROMPT = (
 class TriadicNarratorParams:
     input_filename: str
     output_filename: str
+    world_prompt: str = ""
     max_chapters: int = 1000
     min_chapter_sentences: int = 15
+    min_prompt_sentences: int = 10
     min_transition_sentences: int = 2
     max_transition_sentences: int = 15
-    min_score: int = 85
+    min_score: int = 87
+    min_draft_score: int = 65
     min_transition_score: int = 90
-    max_retries: int = 15
+    evaluations: int = 2
+    max_retries: int = 10
     max_lines: int = 40
     max_tokens: int = 5000
 
@@ -304,6 +332,170 @@ class TriadicIterativeNarrator:
                 ctx = copy_ctx
 
             output_file.write(f"% Elapsed time : {time.perf_counter() - start:.1f} s\n\n")
+
+# Prompt Narrator
+@dataclass
+class TriadicPromptNarrator:
+    llm: TriadicLLM
+    writer: TriadicWriter
+    params: TriadicNarratorParams
+    writer_params: WriterParams
+
+    def process_book(self):
+        print("Processing prompt book")
+
+        with open(self.params.output_filename, "w", encoding='utf-8-sig') as output_file:             
+            start = time.perf_counter()
+
+            ctx = self.writer.agent.new_context()
+            if self.writer_params.cas_vector:
+                ctx.set_cas_vector(self.writer_params.cas_vector)
+            
+            chapter_nr = 1
+            line_nr = 0
+            previous_chapter = None
+            
+            while chapter_nr <= self.params.max_chapters and line_nr < self.writer_params.lines:
+                print(f"Generating chapter {chapter_nr} at line {line_nr}")
+                
+                # Generate chapter
+                copy_ctx = ctx.copy_full()
+                story: WriterStory = self.writer.agent.write_chapter(
+                    line_nr, self.params.max_lines, copy_ctx, self.writer_params)
+                chapter = TriadicNarratorChapter(story.to_natural())
+                print(f"Generated chapter has {len(chapter.original_sentences)} lines")
+                
+                # Determine chapter title
+                chapter.title = None
+                for _ in range(self.params.max_retries):
+                    title = self.llm.generate_title(chapter.original_sentences, self.params.max_tokens)
+                    title = title.replace('"', "")
+                    if title != "Untitled":
+                        chapter.title = title
+                        break
+                if not chapter.title:
+                    continue
+                print(f"The draft chapter title is {chapter.title}")
+
+                # Determine a score for generated chapter
+                chapter.generation_scores = []
+                for _ in range(self.params.max_retries):
+                    score = self.llm.score(chapter.original_sentences, chapter.title, self.params.max_tokens)
+                    if score > 0:
+                        chapter.generation_scores.append(score)
+                        if len(chapter.generation_scores) >= self.params.evaluations:                    
+                            break
+                if len(chapter.generation_scores) < self.params.evaluations:
+                    continue
+                min_score = min(chapter.generation_scores)
+                print(f"Chapter draft score = {min_score} {chapter.generation_scores}")
+                if min_score < self.params.min_draft_score:
+                    continue
+                
+                # Build a prompt from the draft chapter
+                summary_prompt = SUMMARY_PROMPT \
+                    .replace("$TITLE", chapter.title) \
+                    .replace("$WORLD", self.params.world_prompt)
+                chapter.prompt = None
+                for _ in range(self.params.max_retries):
+                    prompt = self.llm.moderate(summary_prompt, f"PROMPT-{chapter_nr}",
+                        chapter.original_sentences, self.params.max_tokens)
+                    if len(prompt) >= self.params.min_prompt_sentences:
+                        chapter.prompt = prompt
+                        break                    
+                if not chapter.prompt:
+                    continue
+                print(f"Chapter prompt lines = {len(chapter.prompt)}")
+
+                # Build a chapter from the prompt
+                chapter.moderated_sentences = None
+                for _ in range(self.params.max_retries):                        
+                    moderated = self.llm.moderate(WRITE_PROMPT, f"WRITE-{chapter_nr}",
+                        chapter.prompt, self.params.max_tokens)
+                    if len(moderated) < self.params.min_chapter_sentences:
+                        continue                
+                    print(f"Chapter lines = {len(moderated)}")
+                    
+                    # Determine new chapter title
+                    title = self.llm.generate_title(moderated, self.params.max_tokens)
+                    title = title.replace('"', "")
+                    if title == "Untitled":
+                        continue
+                    chapter.title = title
+                    print(f"The chapter title is {chapter.title}")
+                                        
+                    # Determine a score for moderated chapter
+                    chapter.moderated_score = 0
+                    for _ in range(self.params.max_retries):
+                        score = self.llm.score(moderated, chapter.title, self.params.max_tokens)
+                        if score > 0:
+                            chapter.moderated_score = score
+                            break
+                    print(f"The chapter has score {chapter.moderated_score}")
+                    if chapter.moderated_score < self.params.min_score:
+                        continue
+                    chapter.moderated_sentences = moderated
+                    break
+                if not chapter.moderated_sentences:
+                    continue
+                
+                # Determine a transition to previous chapter
+                chapter.transition = None
+                if previous_chapter:
+                    old_moderated_sentences = previous_chapter.moderated_sentences.copy()
+                    for _ in range(self.params.max_retries):
+                        transition = bridge_chapters(self.llm, previous_chapter, chapter, self.params.max_tokens)
+                        if len(transition) >= self.params.min_transition_sentences and \
+                           len(transition) <= self.params.max_transition_sentences and \
+                           transition[-1] != chapter.moderated_sentences[-1] and \
+                            check_no_repetition(transition):
+                            # indicate transition by double empty line
+                            chapter.transition = transition
+                            previous_chapter.moderated_sentences.extend(transition)
+                            print(f"The previous chapter has a transition of {len(transition)} lines")
+                            break
+
+                # Determine if the new chapter is a good transition from previous chapter
+                chapter.transition_score = 100
+                if previous_chapter:
+                    check_prompt = bridge_prompt(CHECK_PROMPT, previous_chapter, chapter)
+                    for _ in range(self.params.max_retries):
+                        score = self.llm.score_prompt(check_prompt, self.params.max_tokens)
+                        chapter.transition_score = score
+                        if score > 0:
+                            break
+                    if chapter.transition_score < self.params.min_transition_score:
+                        # remove transition from previous chapter
+                        previous_chapter.moderated_sentences = old_moderated_sentences
+                        continue
+                    print(f"The chapter has transition score {chapter.transition_score}")
+
+                # Write chapter to output file
+                if chapter.transition:
+                    output_file.write("% TRANSITION\n")
+                    for line in chapter.transition:
+                        output_file.write(line + "\n")
+                    output_file.write("\n")            
+                output_file.write(f"% {'-' * 50}\n")
+                output_file.write(f"% CHAPTER {chapter_nr} : SCORE = {chapter.moderated_score}\n")
+                output_file.write(f"% DRAFT SCORE = {min(chapter.generation_scores)}\n")
+                if previous_chapter:
+                    output_file.write(f"% TRANSITION SCORE = {chapter.transition_score}\n")
+                output_file.write(f"% {'-' * 50}\n")
+                output_file.write(f"\chapter{{{chapter.title}}}\n\n")
+                for line in chapter.moderated_sentences:
+                    output_file.write(line + "\n")
+                output_file.write("\n")
+                output_file.flush()
+                
+                # Advance to the next chapter
+                line_nr += len(chapter.original_sentences)
+                previous_chapter = chapter                
+                chapter_nr += 1
+                ctx = copy_ctx
+
+            output_file.write(f"% Elapsed time : {time.perf_counter() - start:.1f} s\n\n")
+
 
 # ----- TRANSITION HELPERS -----
 

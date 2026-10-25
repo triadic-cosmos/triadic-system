@@ -1,27 +1,44 @@
 # Narrator pipeline runner, works on a generated draft book or iteratively
-from engine.triadic_narrator import TriadicNarrator, TriadicIterativeNarrator, TriadicNarratorParams
+from engine.triadic_narrator import (
+    TriadicNarrator,
+    TriadicIterativeNarrator,
+    TriadicPromptNarrator,
+    TriadicNarratorParams
+)
 from engine.triadic_writer import TriadicWriter
 from engine.triadic_llm import TriadicLLM
 
 from dmlg import WriterParams, DATA_FOLDER
 
+# Parameters
 MODEL = "mini"
 MODEL_PREFIX = "token"
 DATASET_FOLDER = DATA_FOLDER + MODEL
-PREFIXES = ["run7"]
+PREFIXES = ["run8"]
 MAX_CHAPTERS = 1000
-MAX_RETRIES = 3
+MAX_RETRIES = 10
 NUM_LINES = 2000
-ITERATIVE = True
-USE_MATRIX = False
+PROMPT = True
+ITERATIVE = False
+USE_MATRIX = True
 LEMMA_BLACKLIST = {"mr", "dr"}
-CAS_VECTORS = [[0.0,3.0,0.0,0.0,0.0]]
+CAS_VECTORS = [[2.0,0.5,1.0,2.0,0.5]]
+
+WORLD_PROMPT = (
+"The main characters are Dr Albert Einstein and Alice. "
+"They are scientists who investigate cosmic anomalies. "
+"Earth is the primary setting. "
+"Any discovered alien world should be called Zazzle. "
+"Strong triadic influences should appear naturally throughout the story. "
+"A recurring theme is triadic structures and mysterious celestial phenomena. "
+"The genre is poetic cosmic science fiction with a subtle horror atmosphere."
+)
 
 # Main
 llm: TriadicLLM = TriadicLLM()
 
-# Create writer when iterative
-if ITERATIVE:
+# Create writer when needed
+if PROMPT or ITERATIVE:
     writer: TriadicWriter = TriadicWriter(MODEL, MODEL_PREFIX)
     suffix = "_iter_book"
 else:
@@ -35,6 +52,7 @@ for index in range(len(PREFIXES)):
     params: TriadicNarratorParams = TriadicNarratorParams(
         input_filename=f"{DATASET_FOLDER}/output/{prefix}_output.txt",
         output_filename=f"{DATASET_FOLDER}/narrator/{prefix}{suffix}.txt",
+        world_prompt=WORLD_PROMPT,
         max_chapters=MAX_CHAPTERS,
         max_retries=MAX_RETRIES)
     
@@ -43,13 +61,17 @@ for index in range(len(PREFIXES)):
         max_chapters = MAX_CHAPTERS,
         lemma_blacklist = LEMMA_BLACKLIST,
         cas_vector = cas_vector,
-        use_matrix=USE_MATRIX
+        use_matrix = USE_MATRIX
     )
 
-    if ITERATIVE:                
+    # Create the desired narrotor
+    if PROMPT:
+        narrator: TriadicPromptNarrator = TriadicPromptNarrator(
+            llm, writer, params, writer_params)
+    elif ITERATIVE:                
         narrator: TriadicIterativeNarrator = TriadicIterativeNarrator(
             llm, writer, params, writer_params)
-        narrator.process_book()
     else:
         narrator: TriadicNarrator = TriadicNarrator(llm, params)
-        narrator.process_book()
+    
+    narrator.process_book()

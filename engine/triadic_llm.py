@@ -93,6 +93,7 @@ class TriadicLLM:
             # remove output artifacts
             if len(lower_line) < 5 or \
                lower_line.startswith("fix the following") or \
+               lower_line.startswith("transform the following") or \
                lower_line.endswith(":") or \
                "title:" in lower_line or \
                "corrected" in lower_line or \

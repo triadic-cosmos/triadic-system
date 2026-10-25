@@ -5,7 +5,7 @@ from engine.triadic_titler import TriadicTitler
 from dmlg import DATA_FOLDER
 
 DATASET_NAME = "mini"
-BOOK_PREFIX = "run3"
+BOOK_PREFIX = "run7"
 EXTRA = "_iter"
 BOOK_FILENAME = DATA_FOLDER + DATASET_NAME + "/narrator/" + BOOK_PREFIX + EXTRA + "_book.txt"
 TITLES = 5
