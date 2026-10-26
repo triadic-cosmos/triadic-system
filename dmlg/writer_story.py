@@ -22,6 +22,18 @@ class WriterStory:
         joined = " ".join([sentence.fixed for sentence in self.sentences])
         return joined
     
+    def to_sentences(self) -> List[str]:
+        result = []
+        for sentence in self.sentences:
+            line = sentence.fixed
+            if line[0] == '$':
+                line = line[2:]
+            elif line[0] == '#':
+                line = line[2:]
+                result.append("")     
+            result.append(line)
+        return result
+    
     def to_natural(self) -> List[str]:
         result = []
         indent = True

@@ -5,7 +5,7 @@ from dmlg import WriterParams
 import time
 
 MODEL = "mini"
-PREFIXES = ["base"]
+PREFIXES = ["token"]
 
 NUM_LINES = 1000
 MAX_CHAPTERS = 1000

@@ -14,15 +14,16 @@ from dmlg import WriterParams, DATA_FOLDER
 MODEL = "mini"
 MODEL_PREFIX = "token"
 DATASET_FOLDER = DATA_FOLDER + MODEL
-PREFIXES = ["run8"]
+PREFIXES = ["run10"]
 MAX_CHAPTERS = 1000
 MAX_RETRIES = 10
 NUM_LINES = 2000
+DRAFT = True
 PROMPT = True
 ITERATIVE = False
 USE_MATRIX = True
 LEMMA_BLACKLIST = {"mr", "dr"}
-CAS_VECTORS = [[2.0,0.5,1.0,2.0,0.5]]
+CAS_VECTORS = [[1.0,0.0,0.0,1.0,0.0]]
 
 WORLD_PROMPT = (
 "The main characters are Dr Albert Einstein and Alice. "
@@ -54,7 +55,8 @@ for index in range(len(PREFIXES)):
         output_filename=f"{DATASET_FOLDER}/narrator/{prefix}{suffix}.txt",
         world_prompt=WORLD_PROMPT,
         max_chapters=MAX_CHAPTERS,
-        max_retries=MAX_RETRIES)
+        max_retries=MAX_RETRIES,
+        draft=DRAFT)
     
     writer_params: WriterParams = WriterParams(
         lines = NUM_LINES,
