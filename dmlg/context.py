@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 from typing import List
 
 from .tokens import Token, HISTORY_TOKENS, TRACKER_TOKENS
-from .narrative_memory import NarrativeMemory
 from .config import Configuration
 
 HISTORY_BLACKLIST = {
@@ -151,9 +150,6 @@ class ContextWindow:
         self._sentence_memory = [0] * self.configuration.narrative_sentences \
                                     * self.configuration.lemma_output_dimension
         
-        self._narrative_memory = NarrativeMemory(self.lemma_embedding_dict, self.configuration)
-        self._narrative_memory_embedding = None
-
         self._current_tokens = []
         self._current_sentence = CurrentSentence(
             self.lemma_embedding_dict,
@@ -216,11 +212,7 @@ class ContextWindow:
     def update_sentence_memory(self, vector: List[float]):
         self._sentence_memory = vector + self._sentence_memory[:-len(vector)]
         self._sentence_prediction = None
-    
-    def update_narrative_memory(self, tokens: List[Token]):
-        self._narrative_memory.update_from_sentence(tokens)
-        self._narrative_memory_embedding = None
-    
+        
     def update_entity_tracking(self, tokens: List[Token]):
         self._entity_tracker.update_from_sentence(tokens)
     
@@ -245,7 +237,6 @@ class ContextWindow:
         ctx._entity_tracker = self._entity_tracker.copy()
         
         ctx._sentence_memory = self._sentence_memory.copy()
-        ctx._narrative_memory = self._narrative_memory.copy()
         
         return ctx
     
@@ -280,11 +271,6 @@ class ContextWindow:
     def get_sentence_memory_embedding(self) -> List[float]:
         return self._sentence_memory
         
-    def get_narrative_memory_embedding(self) -> List[float]:
-        if self._narrative_memory_embedding == None:
-            self._narrative_memory_embedding = self._narrative_memory.get_state()
-        return self._narrative_memory_embedding
-    
     def get_entity_tracker_embedding(self) -> List[float]:
         return self._entity_tracker.get_state()
     
@@ -316,7 +302,6 @@ class InputEncoder:
     def encode(self, model_input: ModelInput) -> List[float]:
         current_embedding = model_input.window.get_current_embedding()
         sentence_embedding = model_input.window.get_sentence_memory_embedding()
-        # narrative_embedding = model_input.window.get_narrative_memory_embedding()        
         entity_embedding = model_input.window.get_entity_tracker_embedding()
         token_history = model_input.window.get_token_history_embedding()
         line_position = model_input.line_position

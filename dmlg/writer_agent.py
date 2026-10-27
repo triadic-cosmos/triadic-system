@@ -405,7 +405,6 @@ class WriterAgent:
     
     def update_context(self, ctx: ContextWindow, sentence: WriterSentence):
         ctx.start_sentence()
-        ctx.update_narrative_memory(sentence.tokens)
         ctx.update_entity_tracking(sentence.tokens)
         
         sentence_vector = self.glp_network.lemma_embedding_dict.get_sentence_embedding(sentence.target_tokens)

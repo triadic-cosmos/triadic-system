@@ -28,7 +28,6 @@ class TrainingBatchBuilder:
 
     def update_context(self, sentence: CurriculumSentence, context: ContextWindow):
         context.start_sentence()
-        context.update_narrative_memory(sentence.tokens)
         context.update_entity_tracking(sentence.tokens)
 
     def build_sentence(self, index: int, sentence: CurriculumSentence, line_position: List[float], context: ContextWindow):
@@ -45,7 +44,7 @@ class TrainingBatchBuilder:
                 self.agent.glp_network.learn(model_input, target, pos, sentence.batch)
                 context.add_token(target)
         
-        # 3. context / narrative for each sentence
+        # 3. update context
         self.update_context(sentence, context)
 
         # 4. convert batch to sentence
