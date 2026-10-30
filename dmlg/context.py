@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 from typing import List
 
-from .tokens import Token, HISTORY_TOKENS, TRACKER_TOKENS
+from .tokens import Token, TargetToken, HISTORY_TOKENS, TRACKER_TOKENS
 from .config import Configuration
 
 HISTORY_BLACKLIST = {
@@ -146,7 +146,6 @@ class ContextWindow:
 
         self._entity_tracker = EntityTracker(self.tracking, self.configuration.tracker_alpha)
 
-        self._sentence_prediction = None
         self._sentence_memory = [0] * self.configuration.narrative_sentences \
                                     * self.configuration.lemma_output_dimension
         
@@ -209,9 +208,13 @@ class ContextWindow:
                     for token_history in self._token_histories:
                         token_history.add(emb)
     
+    def add_target_token(self, token: TargetToken):
+        self.add_token(token.grammar)
+        if token.lemma.is_lemma():
+            self.add_token(token.lemma)
+    
     def update_sentence_memory(self, vector: List[float]):
         self._sentence_memory = vector + self._sentence_memory[:-len(vector)]
-        self._sentence_prediction = None
         
     def update_entity_tracking(self, tokens: List[Token]):
         self._entity_tracker.update_from_sentence(tokens)
@@ -239,21 +242,14 @@ class ContextWindow:
         ctx._sentence_memory = self._sentence_memory.copy()
         
         return ctx
-    
-    def set_sentence_prediction(self, pred):
-        self._sentence_prediction = pred
-    
+        
     def set_cas_vector(self, cas_vector: List[float]):
         self._cas_vector = cas_vector
     
     @property
     def position(self) -> int:
         return self._current_sentence.position
-    
-    @property
-    def sentence_prediction(self):
-        return self._sentence_prediction
-    
+        
     @property
     def cas_vector(self) -> List[float]:
         return self._cas_vector
@@ -263,25 +259,20 @@ class ContextWindow:
         return self._current_tokens
             
     def get_current_embedding(self) -> List[float]:
-        if self.configuration.sentence_based:
-            return []
-        else:
-            return self._current_sentence.get()
+        return self._current_sentence.get()
         
     def get_sentence_memory_embedding(self) -> List[float]:
         return self._sentence_memory
-        
+       
     def get_entity_tracker_embedding(self) -> List[float]:
         return self._entity_tracker.get_state()
     
     def get_token_history_embedding(self) -> List[float]:
-        if self.configuration.sentence_based:
-            return []
         embedding = []
         for token_history in self._token_histories:
             embedding += token_history.get() 
         return embedding
-    
+
 # ============================================================
 # ModelInput
 # ============================================================
@@ -292,6 +283,9 @@ class ModelInput:
     line_position: List[float]
     allow_chapter: bool
     allow_paragraph: bool
+    
+    def copy(self) -> "ModelInput":
+        return ModelInput(self.window.copy_full(), self.line_position, True, True)
 
 # ============================================================
 # InputEncoder
@@ -299,7 +293,20 @@ class ModelInput:
 
 @dataclass(frozen=True)
 class InputEncoder:
-    def encode(self, model_input: ModelInput) -> List[float]:
+    def encode_sentence(self, model_input: ModelInput) -> List[float]:
+        sentence_embedding = model_input.window.get_sentence_memory_embedding()
+        entity_embedding = model_input.window.get_entity_tracker_embedding()
+        line_position = model_input.line_position
+        cas_vector = model_input.window.cas_vector
+        
+        return (
+            sentence_embedding
+            + entity_embedding
+            + line_position
+            + cas_vector
+        )        
+        
+    def encode_token(self, model_input: ModelInput) -> List[float]:
         current_embedding = model_input.window.get_current_embedding()
         sentence_embedding = model_input.window.get_sentence_memory_embedding()
         entity_embedding = model_input.window.get_entity_tracker_embedding()

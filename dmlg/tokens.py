@@ -103,8 +103,6 @@ class Token:
     def __init__(self, text: str):
         self._text = text
         self._id = self._compute_id(text)
-        self._grammar_index: Optional[int] = None
-        self._lemma_index: Optional[int] = None
 
     @staticmethod
     def _compute_id(text: str) -> int:
@@ -295,62 +293,6 @@ class TokenPages:
                 self.output_cache[token] = page
                 return page
         return None
-
-# ============================================================
-# TokenDictionary
-# ============================================================
-
-class TokenDictionary:
-    def __init__(self):
-        self.map: Dict[str, Token] = {}
-        self._next_lemma_index = 0
-
-        # 1. Preload all grammar tokens with fixed indices
-        for idx, text in enumerate(GRAMMAR_TOKENS):
-            tok = Token(text)
-            tok.grammar_index = idx
-            self.map[text] = tok
-
-        # 2. Also preload EOL and NONE if needed
-        Token.EOL.grammar_index = GRAMMAR_TOKENS.index("<EOL>")
-        self.map["<EOL>"] = Token.EOL
-
-        Token.NONE.grammar_index = None
-        self.map["<NONE>"] = Token.NONE
-
-    def add_and_get(self, text: str) -> Token:
-        # Already known?
-        if text in self.map:
-            return self.map[text]
-
-        # Create new token
-        tok = Token(text)
-        self.map[text] = tok
-
-        # Grammar token?
-        if tok.is_grammar():
-            # Grammar tokens should already be preloaded
-            # but if new grammar tokens appear, assign index dynamically
-            if tok.text in GRAMMAR_TOKENS:
-                tok.grammar_index = GRAMMAR_TOKENS.index(tok.text)
-            else:
-                raise ValueError(f"Unknown grammar token: {tok.text}")
-            return tok
-
-        # Lemma token → assign lemma_index
-        tok.lemma_index = self._next_lemma_index
-        self._next_lemma_index += 1
-
-        return tok
-
-    def __contains__(self, text: str) -> bool:
-        return text in self.map
-
-    def __getitem__(self, text: str) -> Token:
-        return self.map[text]
-
-    def __repr__(self):
-        return f"TokenDictionary({list(self.map.keys())})"
     
 # ============================================================
 # LearnedTokenEmbedding
@@ -416,8 +358,6 @@ class LemmaEmbeddingDictionary:
         self.fixed_output_embeddings[key] = embedding
         return embedding
 
-import numpy as np
-
 class LemmaEmbeddingDictionary:
     def __init__(self, input_dimension: int, output_dimension: int):
         self.input_embeddings: Dict[int, LearnedTokenEmbedding] = {}
@@ -453,42 +393,23 @@ class LemmaEmbeddingDictionary:
         self.fixed_output_embeddings[key] = embedding
         return embedding
 
-    def get_sentence_embedding(self, targets: List[TargetToken]) -> List[float]:
-        """
-        Build a cosine-distance optimized sentence embedding.
-
-        The goal is to produce ONE vector that lies as close as possible
-        (in cosine similarity space) to ALL fixed output embeddings of the
-        target tokens in the sentence.
-
-        The mathematically optimal solution is:
-        1. Normalize each token embedding
-        2. Compute the mean direction vector
-        3. Normalize again to unit length
-
-        This produces the vector with maximal average cosine similarity
-        to all token embeddings.
-        """
-
-        # Edge case: empty sentence → return zero vector
-        if not targets:
-            return [0.0] * self.output_dimension
-        
-        chapter = False
-        paragraph = False
-
+    def get_sentence_embedding(self, targets: List[TargetToken]) -> List[float]:        
         # Collect all fixed output embeddings as numpy vectors
         vectors = []
         for target in targets:
-            if target.grammar.is_chapter():
-                chapter = True
-            elif target.grammar.is_paragraph():
-                paragraph = True
-            else:
-                embedding = self.get_fixed_output_embedding(target)
-                vec = np.array(embedding.embedding, dtype=np.float32)
-                vectors.append(vec)
-
+            # Ignore pure structural tokens
+            if target.grammar.is_chapter() or \
+               target.grammar.is_paragraph() or \
+               target.grammar.is_eol():
+                continue
+            embedding = self.get_fixed_output_embedding(target)
+            vec = np.array(embedding.embedding, dtype=np.float32)
+            vectors.append(vec)
+            
+        # Edge case: empty sentence → return zero vector
+        if not vectors:
+            return [0.0] * self.output_dimension
+            
         V = np.stack(vectors, axis=0)
 
         # Normalize each embedding vector (unit length)

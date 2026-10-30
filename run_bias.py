@@ -1,4 +1,4 @@
-# Add a bias MLP to a GLPG model for finetuning
+# Add a bias MLP to a model for finetuning
 from engine.triadic_writer import TriadicWriter
 
 from dmlg import WriterEnvironment, WriterAgent, AgentBuilder, 

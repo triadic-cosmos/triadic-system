@@ -1,3 +1,4 @@
+# Change hidden size of a model
 from engine.triadic_trainer import TriadicTrainer
 
 MODEL = "mix1"

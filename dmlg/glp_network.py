@@ -8,20 +8,18 @@ import torch
 import torch.nn.functional as F
 
 from .config import Configuration
-from .tokens import (
-    Token,
-    TargetToken,
-    TokenDictionary,
-    TokenLogit,
-    TokenPage,
-    LemmaEmbeddingDictionary,
-    GRAMMAR_TOKENS
-)
 from .writer_story import WriterParams
 from .context import ModelInput, InputEncoder
 from .neural import NeuralNetwork
-from .training import TrainingBatch, TrainingSample, TrainingSampleSentence
+from .training import TrainingSampleSentence
 from .rulebased import RuleBasedFilter
+from .tokens import (
+    Token,
+    TargetToken,
+    TokenLogit,
+    TokenPage,
+    LemmaEmbeddingDictionary
+)
 
 RULE_BASED: RuleBasedFilter = RuleBasedFilter()
 
@@ -32,12 +30,10 @@ RULE_BASED: RuleBasedFilter = RuleBasedFilter()
 @dataclass
 class GlpNetwork:
     configuration: Configuration
-    token_dictionary: TokenDictionary
     encoder: InputEncoder = field(init=False)
 
     glp_network: NeuralNetwork = field(init=False)
 
-    grammar_tokens: List[Token] = field(init=False)
     lemma_embedding_dict: LemmaEmbeddingDictionary = field(init=False)
 
     page_list: List[TokenPage] = field(default_factory=list)
@@ -45,69 +41,38 @@ class GlpNetwork:
 
     def __post_init__(self):
         self.encoder = InputEncoder()
+        self.lemma_embedding_dict = self.create_lemma_embedding_dictionary()        
 
-        # monolithic network
+        # Input vector dimensions
+        token_input_size = self.configuration.generator_token_input_size()
+
+        # MLP network
         self.glp_network = NeuralNetwork(
-            self.configuration.generator_input_size(),
+            token_input_size,
             self.configuration.first_hidden_size,
             self.configuration.other_hidden_size,
             self.configuration.generator_output_size()
         )
 
-        self.lemma_embedding_dict = self.create_lemma_embedding_dictionary()        
-        self.grammar_tokens = [self.token_dictionary.map[text] for text in GRAMMAR_TOKENS]
-        
-        # projection matrices
-        self.matrices = []
-        for _ in range(self.configuration.matrix_positions):
-            self.matrices.append(torch.eye(self.configuration.lemma_output_dimension))
-
+        # Predictor matrix
+        self.predictor_matrix = torch.empty(
+            self.configuration.generator_output_size(),
+            token_input_size
+        )
+        torch.nn.init.normal_(self.predictor_matrix, mean=0.0, std=0.01)
+                
     # ------------------------------------------------------------
-    # Embedding Learning
+    # Token conversion
     # ------------------------------------------------------------
 
-    def create_lemma_embedding_dictionary(self) -> LemmaEmbeddingDictionary:
-        return LemmaEmbeddingDictionary(
-                self.configuration.lemma_input_dimension,
-                self.configuration.lemma_output_dimension)
+    def get_target_tokens(self) -> set:
+        output_tokens = set()
+        for p in self.page_list:
+            output_tokens.update(p.output_tokens)
+        return output_tokens
 
-    def _update_lemma_embeddings_after_batch(self, samples: List[TrainingSample]):
-        alpha: float = self.configuration.learn_alpha
-        
-        for s in samples:
-            x = torch.tensor([s.input_vector], dtype=torch.float32)
-            with torch.no_grad():
-                pred = self.glp_network(x).squeeze(0)
-
-            lemma_dim = self.configuration.lemma_output_dimension
-            embedding_pred = pred[:lemma_dim]
-            embedding_pred = F.normalize(embedding_pred, p=2, dim=0)
-
-            emb_obj = self.lemma_embedding_dict.get_output_embedding(s.target)
-            emb_obj.update(embedding_pred.tolist(), alpha)
-
-    # ------------------------------------------------------------
-    # Token Learning
-    # ------------------------------------------------------------
-    
-    def learn(self, model_input: ModelInput, target: Token, position: int, batch: TrainingBatch):
-        # TERMINAL GRAMMAR CASE
-        if target.is_terminal():
-            grammar_tok = target
-            lemma_tok = target
-        # NON-TERMINAL GRAMMAR CASE → ignore
-        elif not target.is_lemma():
-            return
-        # LEMMA CASE
-        else:           
-            grammar_tok = model_input.window.last_token()
-            lemma_tok = target
-        tt = TargetToken(grammar=grammar_tok, lemma=lemma_tok)
-
-        # find the page that has the input token
-        prev_lemma = model_input.window.last_lemma_token()
+    def add_to_page(self, tt: Token, prev_lemma: str):
         page = self.pages.get(prev_lemma)
-
         if page is None:
             # find a page that has the same target token
             max_input_size = self.configuration.max_page_input_size
@@ -134,159 +99,122 @@ class GlpNetwork:
         if not page.has_output_token(tt):
             page.add_output_token(tt)
 
-        page_index = self.page_list.index(page)
+    def convert_to_target_tokens(self, tokens: List[Token]) -> List[TargetToken]:
+        previous_lemma = Token.EOL
+        grammar_token = None
+        target_tokens = []
+        
+        for token in tokens:
+            if token.is_terminal():
+                if grammar_token:
+                    print(f"Grammar token without lemma {grammar_token}!")
+                    grammar_token = None
+                # Do not convert end of line token
+                if token.is_eol():
+                    continue
+                target_token = TargetToken(token, token)                 
+                target_tokens.append(target_token)
+                self.add_to_page(target_token, previous_lemma.text)              
+            elif token.is_grammar():
+                if grammar_token:
+                    print(f"Grammar token without lemma {grammar_token}!")
+                grammar_token = token
+            elif not grammar_token:
+                print(f"Lemma token without grammar {token}!")
+            else:
+                target_token: TargetToken = TargetToken(grammar_token, token)
+                target_tokens.append(target_token)
+                self.add_to_page(target_token, previous_lemma.text)                
+                previous_lemma = token                
+                grammar_token = None
+         
+        return target_tokens
 
-        sample = TrainingSample(
-            input_vector=self.encoder.encode(model_input),
-            target=tt,
-            page_index=page_index,
-            position=position
-        )
-        batch.samples.append(sample)
-
-    def learn_batch(self, batch: TrainingBatch):
-        if not batch.samples:
-            return
-
-        self._learn_glp(batch.samples)
-
-        self._update_lemma_embeddings_after_batch(batch.samples)
+    def create_lemma_embedding_dictionary(self) -> LemmaEmbeddingDictionary:
+        return LemmaEmbeddingDictionary(
+                self.configuration.lemma_input_dimension,
+                self.configuration.lemma_output_dimension)
+       
+    # ------------------------------------------------------------
+    # Learning
+    # ------------------------------------------------------------
         
     def learn_sentence(self, sample: TrainingSampleSentence):
-        if sample:
-            self._learn_glp_sentence(sample)
-            
-    # ------------------------------------------------------------
-    # Sample Learning
-    # ------------------------------------------------------------
-    
-    def _learn_glp_sentence(self, sample: TrainingSampleSentence):
-        """
-        Train the GLP semantic sentence model.
-
-        The goal:
-        ---------
-        Given an input vector representing the context, predict a single
-        sentence embedding that represents the semantic meaning of the entire sentence.
-
-        Training procedure:
-        -------------------
-        1. Convert the input vector into a tensor.
-        2. Run the GLP network to predict the sentence embedding.
-        3. Normalize the predicted embedding (unit vector).
-        4. Normalize the target embedding (unit vector).
-        5. Compute cosine similarity loss: 1 - cos(pred, target).
-        6. Backpropagate and update the GLP network parameters.
-        7. Optimize the positional projection matrices.
-
-        This is a stable, convex-like objective that works extremely well for
-        sentence-level semantic learning.
-        """
-
-        # 1. Convert input vector to tensor (batch size = 1)
-        xs = torch.tensor([sample.input_vector], dtype=torch.float32)
-
-        # 2. Predict the sentence embedding
-        pred = self.glp_network(xs)
-
-        # 3. Normalize predicted embedding to unit length
-        pred = F.normalize(pred, p=2, dim=1)
-
-        # 4. Build and normalize the target sentence embedding
-        target = torch.tensor([sample.target_vector], dtype=torch.float32)
-        target = F.normalize(target, p=2, dim=1)
-
-        # 5. Cosine similarity loss (maximize cosine similarity)
-        loss = 1.0 - F.cosine_similarity(pred, target).mean()
-
-        # 6. Backpropagation
-        self.glp_network.opt.zero_grad()
-        loss.backward()
-        self.glp_network.opt.step()
+        # Configuration
+        learning_rate = self.configuration.matrix_learning_rate
+        decay = self.configuration.matrix_decay
+        alpha = self.configuration.learn_alpha
         
-        # 7. Optimize the positional projection matrices using Hebbian learning
-        for pos, token in enumerate(sample.targets):
-            if pos >= self.configuration.matrix_positions:
-                break
-            embedding = self.lemma_embedding_dict.get_output_embedding(token).embedding
-            t = torch.tensor([embedding], dtype=torch.float32)
-            t = F.normalize(t, p=2, dim=1) 
-            delta_matrix = self.configuration.matrix_learning_rate * \
-                torch.outer(pred.squeeze(), t.squeeze())
-            with torch.no_grad():
-                self.matrices[pos] = (delta_matrix +
-                    self.matrices[pos] * self.configuration.matrix_decay).detach()
-    
-    def _learn_glp(self, samples: List[TrainingSample]):
-        # Input batch
-        xs = torch.tensor([s.input_vector for s in samples], dtype=torch.float32)
-
-        # Predict only lemma embedding
-        pred = self.glp_network(xs)
-
-        # Normalize predicted embeddings
-        pred = F.normalize(pred, p=2, dim=1)
-
-        # Build target embeddings
-        lemma_targets = []
-        for s in samples:
-            emb = self.lemma_embedding_dict.get_output_embedding(s.target).embedding
-            lemma_targets.append(emb)
-
-        lemma_targets = torch.tensor(lemma_targets, dtype=torch.float32)
-        lemma_targets = F.normalize(lemma_targets, p=2, dim=1)
-
-        # Cosine loss
-        loss = 1.0 - F.cosine_similarity(pred, lemma_targets).mean()
-
-        # Backprop
+        # Build inputs and outputs from target tokens
+        model_input = sample.model_input.copy()
+        model_input.window.start_sentence()
+        encoded_inputs = []
+        encoded_outputs = []
+        
+        for target in sample.target_tokens:
+            encoded_input = self.encoder.encode_token(model_input)
+            model_input.window.add_target_token(target)
+            embedding = self.lemma_embedding_dict.get_output_embedding(target).embedding
+            encoded_inputs.append(encoded_input)
+            encoded_outputs.append(embedding)
+        
+        # Train MLP network
+        mlp_input = torch.tensor([encoded_inputs], dtype=torch.float32)
+        mlp_input = F.normalize(mlp_input, p=2, dim=1)
+        mlp_output = torch.tensor([encoded_outputs], dtype=torch.float32)
+        mlp_output = F.normalize(mlp_output, p=2, dim=1)
+        mlp_pred = self.glp_network(mlp_input)
+        mlp_pred = F.normalize(mlp_pred, p=2, dim=1)
+        cos_loss = 1.0 - F.cosine_similarity(mlp_pred, mlp_output).mean()
+        l1_loss = torch.mean(torch.abs(mlp_pred - mlp_output))
+        loss = cos_loss + l1_loss
         self.glp_network.opt.zero_grad()
         loss.backward()
         self.glp_network.opt.step()
 
-        # Optimize the positional projection matrices using Hebbian learning
-        for sample in samples:
-            p = sample.position
-            if p < self.configuration.matrix_positions:
-                xs = torch.tensor([sample.input_vector], dtype=torch.float32)
-                pred = self.glp_network(xs)
-                pred = F.normalize(pred, p=2, dim=1)
+        # Update token embeddings
+        if True:
+            with torch.no_grad():        
+                for index, target in enumerate(sample.target_tokens):
+                    input_vec = torch.tensor([encoded_inputs[index]], dtype=torch.float32)
+                    input_vec = F.normalize(input_vec, p=2, dim=1)        
+                    prediction = self.glp_network(input_vec).squeeze(0)
+                    prediction = F.normalize(prediction, p=2, dim=0)
+                    embedding = self.lemma_embedding_dict.get_output_embedding(target)
+                    embedding.update(prediction.tolist(), alpha)
+
+        # Update prediction matrix
+        with torch.no_grad():
+            for index, target in enumerate(sample.target_tokens):
+                # Input vector
+                input_vec = torch.tensor([encoded_inputs[index]], dtype=torch.float32)
+                input_vec = F.normalize(input_vec, p=2, dim=1)
+
+                # Output vector
+                embedding = self.lemma_embedding_dict.get_output_embedding(target).embedding
+                output_vec = torch.tensor([embedding], dtype=torch.float32)
+                output_vec = F.normalize(output_vec, p=2, dim=1)
                 
-                embedding = self.lemma_embedding_dict.get_output_embedding(sample.target).embedding
-                target = torch.tensor([embedding], dtype=torch.float32)
-                target = F.normalize(target, p=2, dim=1)
-                
-                delta_matrix = self.configuration.matrix_learning_rate * \
-                    torch.outer(pred.squeeze(), target.squeeze())
-                with torch.no_grad():
-                    self.matrices[p] = (delta_matrix + \
-                        self.matrices[p] * self.configuration.matrix_decay).detach()
+                # Calculate delta
+                delta_matrix = (
+                    learning_rate *
+                    torch.outer(output_vec.squeeze(), input_vec.squeeze())
+                )
+
+                # Update matrix
+                self.predictor_matrix = delta_matrix + self.predictor_matrix * decay
+
+            self.predictor_matrix = self.predictor_matrix.detach()
 
     # ------------------------------------------------------------
     # Inference
     # ------------------------------------------------------------
-    
+
     def propose(self, params: WriterParams, model_input: ModelInput):
         # Deterministic end of line after end punctuation
         if model_input.window.last_token().is_end_punctuation():
             return [TokenLogit(Token.EOL, Token.EOL, 1.0)]
-                
-        lemma_pred = model_input.window.sentence_prediction
-        if lemma_pred is None:
-            x = torch.tensor([self.encoder.encode(model_input)], dtype=torch.float32)
-            with torch.no_grad():
-                pred = self.glp_network(x).squeeze(0)
-            lemma_pred = F.normalize(pred, p=2, dim=0)
-            if self.configuration.sentence_based:
-                model_input.window.set_sentence_prediction(lemma_pred)
-                
-        # project using position matrix
-        if params.use_matrix:
-            p = model_input.window.position
-            if p < self.configuration.matrix_positions:
-                lemma_pred = lemma_pred @ self.matrices[p]
-                lemma_pred = F.normalize(lemma_pred, p=2, dim=0)
-        
+                        
         # Determine incompatible tokens
         min_tokens = params.min_words * 2
         incompatible_grammar = RULE_BASED.determine_incompatible_grammar(model_input, min_tokens)
@@ -303,9 +231,7 @@ class GlpNetwork:
         # This mode uses only the MLP over the full vocab
         else:
             if not hasattr(self, "output_tokens"):
-                self.output_tokens = set()
-                for p in self.page_list:
-                    self.output_tokens.update(p.output_tokens)
+                self.output_tokens = self.get_target_tokens()                
                 print(f"Built vocab of {len(self.output_tokens)} target tokens.")
             if params.max_pageless_vocab < len(self.output_tokens):
                 # Use random shuffle of vocab with period terminal token
@@ -316,7 +242,15 @@ class GlpNetwork:
             else:
                 # Use complete vocab in pageless mode
                 output_tokens = self.output_tokens
-                    
+                
+        # Infer proposal 
+        with torch.no_grad():
+            x = torch.tensor([self.encoder.encode_token(model_input)], dtype=torch.float32)
+            matrix_pred = self.predictor_matrix @ x.squeeze()
+            matrix_pred = F.normalize(matrix_pred, p=2, dim=0)
+            mlp_pred = self.glp_network(x).squeeze(0)
+            mlp_pred = F.normalize(mlp_pred, p=2, dim=0)
+                                
         # Create all eligible target token pairs
         for tok in output_tokens:
             if not tok.grammar.text in incompatible_grammar and \
@@ -326,9 +260,17 @@ class GlpNetwork:
                     dtype=torch.float32,
                 )                
                 emb = F.normalize(emb, p=2, dim=0)
-                cos = float(torch.dot(lemma_pred, emb))
-                page_pairs.append(TokenLogit(grammar=tok.grammar, lemma=tok.lemma, logit=cos))
+                matrix_logit = score(emb, matrix_pred)
+                mlp_logit = score(emb, mlp_pred)
+                logit = matrix_logit + mlp_logit
+                page_pairs.append(TokenLogit(grammar=tok.grammar, lemma=tok.lemma, logit=logit))
 
         # Sort pairs and return
         page_pairs.sort(key=lambda t: t.logit, reverse=True)
         return page_pairs
+
+# Scoring function
+def score(embedding, prediction):
+    cos_score = torch.dot(prediction, embedding)
+    l1_score = torch.mean(torch.abs(prediction - embedding))
+    return cos_score - l1_score

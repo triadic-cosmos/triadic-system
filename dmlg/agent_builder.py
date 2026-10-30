@@ -14,9 +14,9 @@ from .writer_agent import WriterAgent, ModelInput
 from .writer_environment import WriterEnvironment
 from .curriculum import Curriculum, CurriculumSentence
 from .tokens import TokenPage
-from .training import TrainingBatch, TrainingSample, TrainingSampleSentence
+from .training import TrainingSampleSentence
 
-DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v11/"
+DATA_FOLDER: str = "../triadic-data/toy-system/toy-system-v12/"
 MODEL_FILENAME: str = "_model.bin"
 TOKENS_FILENAME: str = "_tokens.txt"
 OUTPUT_FILENAME: str = "_output.txt"
@@ -31,36 +31,23 @@ class TrainingBatchBuilder:
         context.update_entity_tracking(sentence.tokens)
 
     def build_sentence(self, index: int, sentence: CurriculumSentence, line_position: List[float], context: ContextWindow):
-        configuration = self.agent.configuration
-        sentence.batch: TrainingBatch = TrainingBatch()
-        
-        # 1. create model input
-        model_input = ModelInput(context, line_position, True, True)
+        # Create model input
+        model_input = ModelInput(context.copy_full(), line_position, True, True)
             
-        # 2. train for each token
-        for pos, tok in enumerate(sentence.tokens):
-            target = self.agent.token_dictionary.add_and_get(tok.text)
-            if not target.is_eol(): # do not learn EOL as transition
-                self.agent.glp_network.learn(model_input, target, pos, sentence.batch)
-                context.add_token(target)
-        
-        # 3. update context
+        # Convert to target tokens
+        target_tokens: List[TargetToken] = \
+            self.agent.glp_network.convert_to_target_tokens(sentence.tokens)
+            
+        # Update context
+        for token in sentence.tokens:
+            context.add_token(token)
         self.update_context(sentence, context)
+        target_vector = self.agent.glp_network.lemma_embedding_dict.get_sentence_embedding(target_tokens)
+        context.update_sentence_memory(target_vector)        
 
-        # 4. convert batch to sentence
-        input_vector = sentence.batch.samples[0].input_vector
-        targets = [sample.target for sample in sentence.batch.samples]
-        target_vector = self.agent.glp_network.lemma_embedding_dict.get_sentence_embedding(targets)
-        context.update_sentence_memory(target_vector)
-        
-        # replace batch token samples with sentence sample
-        if self.agent.configuration.sentence_based:
-            sentence.batch = None
-            sentence.sample = TrainingSampleSentence(input_vector, targets, target_vector)
-        else:            
-            # log statistics for batch
-            sentence.batch.show(index)
-                        
+        # Create training sample
+        sentence.sample = TrainingSampleSentence(model_input, target_tokens)
+                                
     def build_curriculum(self, curriculum_list: List[Curriculum], cas_vector_size: int = 0) -> Curriculum:
         combined_curriculum = Curriculum()
         total_samples: int = 0
@@ -82,10 +69,7 @@ class TrainingBatchBuilder:
                     paragraph_line = 0
                 line_position = [line / last_line, paragraph_line / paragraph_divider]                                
                 self.build_sentence(line, sentence, line_position, context)
-                if self.agent.configuration.sentence_based:
-                    total_samples += len(sentence.sample.targets)
-                else:
-                    total_samples += len(sentence.batch.samples)
+                total_samples += len(sentence.sample.target_tokens)
                 line += 1
                 paragraph_line += 1
                 combined_curriculum.sentences.append(sentence)
@@ -180,6 +164,8 @@ class AgentBuilder:
                 print("Maximum training epochs reached!")
                 break
             iteration += 1
-            print(f"Training iteration {iteration}")
+            print(f"Training for iteration {iteration}")
             agent.train_curriculum(combined_curriculum, random_epochs)        
             agent.save(self.model_filename(environment))
+
+        agent.show_predictor()

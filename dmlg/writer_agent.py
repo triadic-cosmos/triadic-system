@@ -4,6 +4,8 @@ from typing import List, Set, Dict, Optional
 from collections import defaultdict
 
 import torch
+import torch.nn.functional as F
+
 import random
 import pickle
 import math
@@ -11,10 +13,10 @@ import math
 from .config import Configuration
 from .writer_environment import WriterEnvironment
 from .writer_story import WriterStory, WriterSentence, WriterParams
-from .tokens import Token, TokenDictionary, TokenLogit, TargetToken
+from .tokens import Token, TokenLogit, TargetToken
 from .context import ContextWindow, ModelInput
 from .glp_network import GlpNetwork
-from .training import TrainingBatch, TrainingSampleSentence
+from .training import TrainingSampleSentence
 from .curriculum import Curriculum, CurriculumSentence
 from .entity_tracker import TrackerMap
 from .bias import BiasMLP, AMLPBias
@@ -29,7 +31,6 @@ class WriterAgent:
     rng: random.Random = field(init=False)
     configuration: Configuration = field(init=False)
     glp_network: GlpNetwork = field(init=False)
-    token_dictionary: TokenDictionary = field(init=False)
     tracking: dict = field(init=False)
 
     training_count: int = 0
@@ -40,8 +41,7 @@ class WriterAgent:
         self.configuration = self.environment.configuration
         self.id = id
         self.rng = random.Random()
-        self.token_dictionary = TokenDictionary()
-        self.glp_network = GlpNetwork(self.configuration, self.token_dictionary)
+        self.glp_network = GlpNetwork(self.configuration)
 
     def __str__(self):
         return f"[{self.id}] trainings = {self.training_count}"
@@ -74,41 +74,14 @@ class WriterAgent:
         if self.glp_network.glp_network.bias:
             self.glp_network.glp_network.bias.bias_mlp.plot()
 
-    def learn_sentence(self, sample: TrainingSampleSentence):
-        self.glp_network.learn_sentence(sample)
-        self.training_count += len(sample.targets)
-
-    def learn_batch(self, epoch: int, batch: TrainingBatch) -> TrainingBatch:
-        if batch.has_samples():
-            self.glp_network.learn_batch(batch)
-            self.training_count += len(batch.samples) 
-            return TrainingBatch()
-        else:
-            return batch
-
     def train_curriculum(self, curriculum: Curriculum, random_epochs: int):
-        if self.configuration.sentence_based:
-            # Do sentence based training        
-            for epoch in range(1, random_epochs + 1):
-                sentence: CurriculumSentence = curriculum.get_random_sentence(self.rng)
-                sample: TrainingSampleSentence = sentence.sample
-                self.learn_sentence(sample)               
-                if epoch % self.configuration.show_epochs_step == 0:
-                    print(f"{epoch}")
-        else:
-            # Do token based training
-            super_batch: TrainingBatch = TrainingBatch()
-
-            # Train sentences using random order
-            for epoch in range(1, random_epochs + 1):
-                sentence: CurriculumSentence = curriculum.get_random_sentence(self.rng)
-                super_batch.append(sentence.batch)
-                if epoch % self.configuration.epochs_step == 0:
-                    super_batch = self.learn_batch(epoch, super_batch)
-                if epoch % self.configuration.show_epochs_step == 0:
-                    print(epoch)
-        
-            self.learn_batch(random_epochs + 1, super_batch)
+        # Train sentences using random order
+        for epoch in range(1, random_epochs + 1):
+            sentence: CurriculumSentence = curriculum.get_random_sentence(self.rng)
+            self.glp_network.learn_sentence(sentence.sample)
+            self.training_count += len(sentence.tokens)                
+            if epoch % self.configuration.show_epochs_step == 0:
+                print(epoch)
 
         # Show progress
         if epoch % self.configuration.show_epochs_step != 0:
@@ -123,20 +96,63 @@ class WriterAgent:
     def show(self, full = False):
         print(f"training epochs = {self.training_epochs}")
         print(f"training count = {self.training_count}")
-        print(f"input size = {self.configuration.generator_input_size()}")
+        print(f"token input size = {self.configuration.generator_token_input_size()}")
         print(f"page count = {len(self.glp_network.page_list)}")
-        
-        # show projection matrices maximum element
-        print("matrix = ", end = "")
-        for matrix in self.glp_network.matrices:
-            print(f"{torch.max(matrix):.3f}", end = " ")
-        print()
-        
+               
         if full:
             sizes = []
             for page in self.glp_network.page_list:
                 sizes.append(page.get_size_text())
             print(sizes)
+
+    def show_target(self):
+        target_tokens = list(self.glp_network.get_target_tokens())
+        print(f"total targets = {len(target_tokens)}")
+        
+        while len(target_tokens) > 0:
+            first = target_tokens.pop(0)
+            first_embedding = self.glp_network.lemma_embedding_dict.get_output_embedding(first).embedding
+            first_tensor = torch.tensor(first_embedding, dtype=torch.float32)
+            first_tensor = F.normalize(first_tensor, p=2, dim=0)
+            similar_tokens = []
+            
+            for t in target_tokens:
+                other_embedding = self.glp_network.lemma_embedding_dict.get_output_embedding(t).embedding
+                other_tensor = torch.tensor(other_embedding, dtype=torch.float32)
+                other_tensor = F.normalize(other_tensor, p=2, dim=0)
+                score1 = float(torch.dot(first_tensor, other_tensor))
+                score2 = torch.mean(torch.abs(other_tensor - first_tensor))
+                if score1 >= 0.2 and score2 < 0.2:
+                    similar_tokens.append(t)
+                
+            for t in similar_tokens:
+                target_tokens.remove(t)
+            
+            print(f"{first.lemma} = {len(similar_tokens)}")
+
+    def show_predictor(self):
+        with torch.no_grad():
+            m = self.glp_network.predictor_matrix
+            row_norms = m.norm(dim=1)
+            col_norms = m.norm(dim=0)
+
+            print("=== Predictor Matrix Stats ===")            
+            print(f"shape         : {tuple(m.shape)}")
+            print(f"mean          : {m.mean().item():.6f}")
+            print(f"std           : {m.std().item():.6f}")
+            print(f"min           : {m.min().item():.6f}")
+            print(f"max           : {m.max().item():.6f}")
+            print(f"abs mean      : {m.abs().mean().item():.6f}")
+            print(f"abs max       : {m.abs().max().item():.6f}")
+            print(f"l2 norm       : {torch.norm(m).item():.6f}")
+            print(f"p1            : {torch.quantile(m.flatten(), 0.01):.6f}")
+            print(f"p5            : {torch.quantile(m.flatten(), 0.05):.6f}")
+            print(f"p95           : {torch.quantile(m.flatten(), 0.95):.6f}")
+            print(f"p99           : {torch.quantile(m.flatten(), 0.99):.6f}")
+            print(f"row norm mean : {row_norms.mean():.6f}")
+            print(f"row norm max  : {row_norms.max():.6f}")
+            print(f"col norm mean : {col_norms.mean():.6f}")
+            print(f"col norm max  : {col_norms.max():.6f}")            
 
     # ------------------------------------------------------------
     # Persistence
@@ -146,7 +162,6 @@ class WriterAgent:
         state = {
             "id": self.id,
             "config": self.configuration,
-            "token_dictionary": self.token_dictionary,
             "glp_network": self.glp_network,
             "training_count": self.training_count,
             "training_epochs": self.training_epochs,
@@ -162,13 +177,13 @@ class WriterAgent:
 
         agent = WriterAgent(environment, state["id"])
         agent.configuration = state["config"]
-        agent.token_dictionary = state["token_dictionary"]
         agent.glp_network = state["glp_network"]
         agent.training_count = state["training_count"]
         agent.training_epochs = state["training_epochs"]
         agent.tracking = state["tracking"]
         
-        agent.glp_network.glp_network.initialize_bias()
+        if hasattr(agent.glp_network, "glp_network"):
+            agent.glp_network.glp_network.initialize_bias()
         
         print(f"Loaded agent {agent.id}.")
         agent.show(True)
@@ -231,13 +246,13 @@ class WriterAgent:
             generated_targets.append(TargetToken(proposal.grammar, proposal.lemma))
 
             # --- 1. ALWAYS append grammar token ---
-            grammar_tok = self.token_dictionary.add_and_get(proposal.grammar.text)
+            grammar_tok = proposal.grammar
             generated.append(grammar_tok)
             ctx.add_token(grammar_tok)
 
             # --- 2. Append lemma token only if different from grammar ---
             if proposal.lemma is not None and proposal.lemma != proposal.grammar:
-                lemma_tok = self.token_dictionary.add_and_get(proposal.lemma.text)
+                lemma_tok = proposal.lemma
                 generated.append(lemma_tok)
                 ctx.add_token(lemma_tok)
             else:
@@ -257,132 +272,8 @@ class WriterAgent:
                 return None
 
         # --- If no EOL was produced, close the line in context ---
-        eol = self.token_dictionary.add_and_get(Token.EOL.text)
-        ctx.add_token(eol)
+        ctx.add_token(Token.EOL)
         return None
-
-    def generate_sentence_beam_search(
-        self, params: WriterParams, model_input: ModelInput,
-        keyword_scores: dict, used_tokens: set, sentences: List[str]
-    ) -> WriterSentence:
-
-        class Beam:
-            def __init__(self, tokens: List[Token], ctx: ContextWindow, score: float):
-                self.tokens = tokens
-                self.ctx = ctx
-                self.score = score
-                self.eol = self.tokens[-1].is_eol() if self.tokens else False
-
-        # --- config parameters ---
-        temperature = params.beam_temperature
-        alpha = params.beam_alpha
-        jitter_amp = params.beam_jitter
-        max_tokens = params.max_tokens
-        nr_of_beams = params.nr_of_beams
-
-        # --- initialize ---
-        beams: List[Beam] = [Beam([], model_input.window.copy_current(), 0)]
-        best_sentence = None
-        best_score = None
-
-        # --- step over full token range ---
-        for step in range(max_tokens):
-            if len(beams) == 0:
-                break
-
-            new_beams: List[Beam] = []
-
-            for beam in beams:
-                if beam.eol:
-                    new_beams.append(beam)
-                    continue
-
-                # GLP propose(): returns grammar+lemma pairs sorted by score
-                outputs: List[TokenLogit] = self.glp_network.propose(
-                    params,
-                    ModelInput(beam.ctx, model_input.line_position,
-                               model_input.allow_chapter, model_input.allow_paragraph)
-                )
-
-                if not outputs:
-                    continue
-
-                # --- top-k pairs ---
-                top_k = params.top_k
-                candidates = outputs[:top_k]
-
-                # --- softmax over pair-scores ---
-                logits = [c.logit for c in candidates]
-                exp_logits = [math.exp(l / temperature) for l in logits]
-                sum_exp = sum(exp_logits)
-                softmax_scores = [e / sum_exp for e in exp_logits]
-
-                # --- fork beams ---
-                for idx, pair in enumerate(candidates):
-
-                    # 1. Grammar token (always emitted first)
-                    grammar_tok = self.token_dictionary.add_and_get(pair.grammar.text)
-
-                    new_tokens = beam.tokens + [grammar_tok]
-                    new_ctx = beam.ctx.copy_current()
-                    new_ctx.add_token(grammar_tok)
-
-                    # 2. Lemma token (only if different from grammar)
-                    if pair.lemma != pair.grammar:
-                        lemma_tok = self.token_dictionary.add_and_get(pair.lemma.text)
-                        new_tokens.append(lemma_tok)
-                        new_ctx.add_token(lemma_tok)
-
-                    # 3. Score from softmax
-                    score = softmax_scores[idx]
-
-                    # 4. Damping
-                    score = score ** alpha
-
-                    # 5. Multipliers
-                    if grammar_tok.is_eol():
-                        score += 20.0
-                    if grammar_tok.text not in used_tokens:
-                        score *= 1.5
-
-                    # 6. Jitter
-                    score *= 1.0 + self.rng.random() * jitter_amp
-
-                    # 7. Keyword bonus
-                    score += keyword_scores.get(grammar_tok.text, 0)
-
-                    # 8. Accumulate with beam history
-                    total_score = score + beam.score * 0.9
-
-                    # 9. Create new beam
-                    new_beam = Beam(new_tokens, new_ctx, total_score)
-
-                    # 10. Evaluate full sentence
-                    if new_beam.eol:
-                        if best_sentence is None or new_beam.score >= best_score:
-                            # validate canonical tokens
-                            if not self.environment.grammar.basic_validate_grammar_tokens(new_tokens):
-                                continue
-                            natural = self.environment.grammar.convert_from_canonical_tokens(new_tokens)
-                            if not self.environment.semantic.validate(params, sentences, natural):
-                                continue
-                            best_sentence = WriterSentence([], new_tokens, natural)
-                            best_score = new_beam.score
-
-                    new_beams.append(new_beam)
-
-            # prune beams
-            new_beams.sort(key=lambda b: b.score, reverse=True)
-            beams = new_beams[:nr_of_beams]
-
-            if all(b.eol for b in beams):
-                break
-
-        if best_sentence:
-            return best_sentence
-
-        print("X", end="")
-        return []
 
     def fix_story(self, story: WriterStory):
         for sentence in story.sentences:
@@ -458,7 +349,7 @@ class WriterAgent:
         ctx: ContextWindow,
         params: WriterParams
     ) -> WriterStory:
-
+        
         chapters: int = 0
         line_nr: int = 0
         lines: int = params.lines
@@ -467,7 +358,7 @@ class WriterAgent:
         paragraph_divider = self.configuration.paragraph_divider
         fraction_multiplier: float = (params.to_line_fraction - params.from_line_fraction) / (lines - 1)
 
-        # 1. Prompt injection
+        # Prompt injection
         if params.prompt is not None and len(params.prompt) > 0:
             for prompt_line in params.prompt:
                 raw_tokens = self.environment.grammar.convert_to_canonical_tokens(prompt_line)
@@ -477,16 +368,9 @@ class WriterAgent:
         sentences = []
         writer_sentences = []
 
-        # 2. Keyword scoring (lemma or terminal tokens)
-        if params.keywords is not None:
-            keyword_scores = {kw: 1.0 for kw in params.keywords}
-            used_tokens = set()
-
         print("> generating", end=" ")
 
-        beam_attempts = params.beam_attempts
-
-        # 3. Generate story line per line
+        # Generate story line per line
         for _ in range(params.max_attempts):
             ctx.clear_current_sentence()
 
@@ -495,43 +379,22 @@ class WriterAgent:
             allow_chapter = chapter_lines >= params.min_lines_chapter and allow_paragraph
             model_input = ModelInput(ctx, line_position, allow_chapter, allow_paragraph)
 
-            # --- BEAM SEARCH MODE ---
-            if params.beam_search and beam_attempts > 0 and params.keywords is not None:
-                sentence = self.generate_sentence_beam_search(
-                    params,
-                    model_input,
-                    keyword_scores,
-                    used_tokens,
-                    sentences
-                )
+            # Generate sentence
+            sentence = self.generate_sentence(params, model_input, sentences)
+            if not sentence:
+                continue
 
-                if not sentence:
-                    beam_attempts -= 1
-                    continue
-
-                # update keyword usage
-                for token in sentence.tokens:
-                    used_tokens.add(token)
-                    if token.text in keyword_scores:
-                        keyword_scores[token.text] *= 0.9
-
-            # --- NORMAL MODE ---
-            else:
-                sentence = self.generate_sentence(params, model_input, sentences)
-                if not sentence:
-                    continue
-
-            # 4. Log progress
+            # Log progress
             print(f"{line_nr}", end=" ")
 
-            # 5. Update story
+            # Update story
             sentences.append(sentence.natural)
             writer_sentences.append(sentence)
 
-            # 6. Update context window
+            # Update context window
             self.update_context(ctx, sentence)
 
-            # 7. Update line information
+            # Update line information
             line_nr += 1
             if line_nr == lines:
                 break            
@@ -542,7 +405,7 @@ class WriterAgent:
                 chapters += 1
                 if line_nr + params.min_lines_chapter > lines or \
                    chapters >= params.max_chapters:
-                    # remove the new chapter
+                    # Remove the new chapter
                     writer_sentences.pop()
                     break
                 if sentence.tokens[0].text != Token.SOC.text:
@@ -556,14 +419,12 @@ class WriterAgent:
                 chapter_lines += 1
                 paragraph_lines += 1
 
-            beam_attempts = params.beam_attempts
-
         print("done")
 
-        # 7. Build final story
+        # Build final story
         story = WriterStory(writer_sentences)
 
-        # 8. Grammar fix (canonical → natural)
+        # Grammar fix (canonical → natural)
         self.fix_story(story)
 
         print(f"{prefix}. {story.get_story()}")

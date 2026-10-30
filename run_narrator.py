@@ -11,19 +11,19 @@ from engine.triadic_llm import TriadicLLM
 from dmlg import WriterParams, DATA_FOLDER
 
 # Parameters
-MODEL = "mini"
-MODEL_PREFIX = "token"
+MODEL = "alice"
+MODEL_PREFIX = "base"
 DATASET_FOLDER = DATA_FOLDER + MODEL
-PREFIXES = ["run10"]
-MAX_CHAPTERS = 1000
+PREFIXES = ["run1"]
+MAX_CHAPTERS = 5
 MAX_RETRIES = 10
 NUM_LINES = 2000
-DRAFT = True
-PROMPT = True
-ITERATIVE = False
+DRAFT = False
+PROMPT = False
+ITERATIVE = True
 USE_MATRIX = True
 LEMMA_BLACKLIST = {"mr", "dr"}
-CAS_VECTORS = [[1.0,0.0,0.0,1.0,0.0]]
+CAS_VECTORS = [ None ]
 
 WORLD_PROMPT = (
 "The main characters are Dr Albert Einstein and Alice. "

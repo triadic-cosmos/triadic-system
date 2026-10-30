@@ -6,7 +6,7 @@ import struct
 import random
 import re
 
-from .tokens import Token, TokenDictionary
+from .tokens import Token
 from .grammar import GrammarEngine
 from .config import Configuration
 from .writer_environment import WriterEnvironment
@@ -27,7 +27,6 @@ class CurriculumSentence:
 @dataclass(frozen=True)
 class Curriculum:
     sentences: List[CurriculumSentence] = field(default_factory=list)
-    token_dictionary: TokenDictionary = field(default_factory=TokenDictionary) 
 
     def get_random_sentence(self, rng:random.Random) -> CurriculumSentence:
         return self.sentences[rng.randrange(0, len(self.sentences))]
@@ -35,6 +34,9 @@ class Curriculum:
     # ============================================================
     # Curriculum reader
     # ============================================================
+
+    def to_token(self, token_text: str) -> Token:
+        return Token(token_text)
 
     def add_to_curriculum(self, start_token: str, sentences: List[str], environment: WriterEnvironment):
         combined: str = " ".join(sentences)
@@ -50,7 +52,7 @@ class Curriculum:
             eol = s.replace("<COMMA> <PERIOD>", "<PERIOD>") + " <EOL>"
             if i == 1 and start_token:
                 eol = start_token + eol
-            tokens = [self.token_dictionary.add_and_get(t) for t in eol.split(" ") if t != ""]
+            tokens = [self.to_token(t) for t in eol.split(" ") if t != ""]
             natural = environment.grammar.convert_from_canonical(eol)
             self.sentences.append(CurriculumSentence(tokens, natural))
             if VERBOSE:
@@ -121,7 +123,7 @@ class Curriculum:
             for line in lines:
                 if len(line) >= environment.configuration.min_sentence_length:
                     natural = environment.grammar.convert_from_canonical(line)
-                    tokens = [self.token_dictionary.add_and_get(token) for token in line.split(" ") if token != ""]
+                    tokens = [self.to_token(token) for token in line.split(" ") if token != ""]
                     self.sentences.append(CurriculumSentence(tokens, natural))
                     if len(self.sentences) >= environment.configuration.max_sentences:
                         break                    

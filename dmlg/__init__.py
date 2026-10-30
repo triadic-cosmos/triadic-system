@@ -1,6 +1,7 @@
 """
 DMLG - Dynamic Modular Language Graph
 GLPG - Grammar Lemma Paged Graph
+VGPC - Vector-Graph-PRE-CAS
 Part of the Triadic System (Triadic Cosmos ecosystem)
 
 This package exposes the public API of the DMLG and GLPG engine.
@@ -12,7 +13,6 @@ Internal modules remain accessible but are not exported by default.
 from .tokens import (
     Token,
     TokenPage,
-    TokenDictionary,
     TokenLogit,
 )
 
@@ -63,8 +63,7 @@ from .curriculum import (
 # --- Training -------------------------------------------------------------
 
 from .training import (
-    TrainingSample,
-    TrainingBatch
+    TrainingSampleSentence
 )
 
 # --- Bias Network -----------------------------------------------------
@@ -75,8 +74,7 @@ from .bias import BiasMLP, AMLPBias
 
 from .neural import NeuralNetwork
 from .glp_network import (
-    GlpNetwork,
-    TrainingBatch,
+    GlpNetwork
 )
 
 # --- Public API -----------------------------------------------------------

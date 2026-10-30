@@ -15,7 +15,6 @@ class Configuration:
     lemma_output_dimension: int = 64
     total_pages: int = 1000000
     max_page_input_size: int = 1
-    sentence_based: bool = False
     
     # ------------------------------------------------------------
     # Context parameters
@@ -23,17 +22,15 @@ class Configuration:
     position_divider = 30
     paragraph_divider = 50
     
-    narrative_sentences: int = 10
+    narrative_sentences: int = 15
     
     tracker_entities: int = 0
     tracker_alpha: float = 0.98
-
-    # not used for sentence based mode
     
     history_size = [32, 48, 64]
     history_alpha = [0.92, 0.95, 0.98]
     
-    last_embeddings: int = 10
+    last_embeddings: int = 15
     last_embedding_size: int = 16
 
     # ------------------------------------------------------------
@@ -49,10 +46,7 @@ class Configuration:
     # ------------------------------------------------------------
     learn_alpha: float = 0.001
     random_epochs: int = 1000
-    epochs_step: int = 10
     show_epochs_step: int = 100
-    
-    matrix_positions: int = 10
     matrix_decay: float = 0.99999
     matrix_learning_rate: float = 0.001
     
@@ -75,21 +69,19 @@ class Configuration:
             return self.cas_vector_size
         return 0
 
-    def generator_input_size(self) -> int:
+    def generator_sentence_input_size(self) -> int:
         # line position (1) + paragraph position (1) = 2
-        
-        # sentence based encoding
-        if self.sentence_based:
-            return self.narrative_sentences * self.lemma_output_dimension + \
-                   self.tracker_entities + \
-                   self.get_cas_vector_size() + 2
-        
-        # token based encoding
+        return self.narrative_sentences * self.lemma_output_dimension + \
+               self.tracker_entities + \
+               self.get_cas_vector_size() + 2
+
+    def generator_token_input_size(self) -> int:
+        # line position (1) + paragraph position (1) = 2
         return self.generator_current_context_size() + \
                self.narrative_sentences * self.lemma_output_dimension + \
                self.tracker_entities + \
                sum(self.history_size) + \
-               self.get_cas_vector_size() + 2 
+               self.get_cas_vector_size() + 2
 
     def generator_output_size(self) -> int:
         # lemma embedding

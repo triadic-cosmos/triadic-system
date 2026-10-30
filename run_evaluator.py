@@ -1,4 +1,4 @@
-# Output evaluator runner
+# Output book evaluator runner
 from engine.triadic_llm import TriadicLLM
 from engine.triadic_evaluator import TriadicEvaluator
 
@@ -6,7 +6,7 @@ from dmlg import DATA_FOLDER
 
 import time
 
-DATASET_NAME = "mini"
+DATASET_NAME = "planet"
 BOOK_PREFIX = "base"
 DATASET_FOLDER = DATA_FOLDER + DATASET_NAME + "/"
 BOOK_FILENAME = DATASET_FOLDER + "output/" + BOOK_PREFIX + "_output.txt"

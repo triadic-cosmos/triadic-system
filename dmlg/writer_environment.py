@@ -1,7 +1,5 @@
 # writer_environment.py
 from dataclasses import dataclass
-from typing import List
-import random
 
 from .config import Configuration
 from .grammar import GrammarEngine
