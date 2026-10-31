@@ -111,13 +111,13 @@ class WriterAgent:
         
         while len(target_tokens) > 0:
             first = target_tokens.pop(0)
-            first_embedding = self.glp_network.lemma_embedding_dict.get_output_embedding(first).embedding
+            first_embedding = self.glp_network.lemma_embedding_dict.get_embedding(first).embedding
             first_tensor = torch.tensor(first_embedding, dtype=torch.float32)
             first_tensor = F.normalize(first_tensor, p=2, dim=0)
             similar_tokens = []
             
             for t in target_tokens:
-                other_embedding = self.glp_network.lemma_embedding_dict.get_output_embedding(t).embedding
+                other_embedding = self.glp_network.lemma_embedding_dict.get_embedding(t).embedding
                 other_tensor = torch.tensor(other_embedding, dtype=torch.float32)
                 other_tensor = F.normalize(other_tensor, p=2, dim=0)
                 score1 = float(torch.dot(first_tensor, other_tensor))
@@ -243,23 +243,10 @@ class WriterAgent:
             if proposal is None:
                 break
 
-            generated_targets.append(TargetToken(proposal.grammar, proposal.lemma))
-
-            # --- 1. ALWAYS append grammar token ---
-            grammar_tok = proposal.grammar
-            generated.append(grammar_tok)
-            ctx.add_token(grammar_tok)
-
-            # --- 2. Append lemma token only if different from grammar ---
-            if proposal.lemma is not None and proposal.lemma != proposal.grammar:
-                lemma_tok = proposal.lemma
-                generated.append(lemma_tok)
-                ctx.add_token(lemma_tok)
-            else:
-                lemma_tok = grammar_tok   # terminal case
-
-            # --- 3. EOL check MUST be on grammar token ---
-            if grammar_tok.is_eol():
+            # check if token is end of line
+            if proposal.token.grammar.is_eol():
+                generated.append(Token.EOL)
+                
                 # grammar validation on canonical tokens
                 if self.environment.grammar.basic_validate_grammar_tokens(generated):
                     natural = self.environment.grammar.convert_from_canonical_tokens(generated)
@@ -271,8 +258,12 @@ class WriterAgent:
                 # failed quality check
                 return None
 
-        # --- If no EOL was produced, close the line in context ---
-        ctx.add_token(Token.EOL)
+            generated_targets.append(proposal.token)
+            ctx.add_target_token(proposal.token)
+            generated.append(proposal.token.grammar)
+            if proposal.token.lemma.is_lemma():
+                generated.append(proposal.token.lemma)
+            
         return None
 
     def fix_story(self, story: WriterStory):

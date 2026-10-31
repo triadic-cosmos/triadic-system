@@ -100,7 +100,7 @@ class GlpNetwork:
             page.add_output_token(tt)
 
     def convert_to_target_tokens(self, tokens: List[Token]) -> List[TargetToken]:
-        previous_lemma = Token.EOL
+        previous_token = Token.EOL
         grammar_token = None
         target_tokens = []
         
@@ -114,7 +114,8 @@ class GlpNetwork:
                     continue
                 target_token = TargetToken(token, token)                 
                 target_tokens.append(target_token)
-                self.add_to_page(target_token, previous_lemma.text)              
+                self.add_to_page(target_token, previous_token.text)
+                previous_token = token
             elif token.is_grammar():
                 if grammar_token:
                     print(f"Grammar token without lemma {grammar_token}!")
@@ -124,10 +125,10 @@ class GlpNetwork:
             else:
                 target_token: TargetToken = TargetToken(grammar_token, token)
                 target_tokens.append(target_token)
-                self.add_to_page(target_token, previous_lemma.text)                
-                previous_lemma = token                
+                self.add_to_page(target_token, previous_token.text)
+                previous_token = token
                 grammar_token = None
-         
+
         return target_tokens
 
     def create_lemma_embedding_dictionary(self) -> LemmaEmbeddingDictionary:
@@ -152,7 +153,7 @@ class GlpNetwork:
         for target in sample.target_tokens:
             encoded_input = self.encoder.encode_token(model_input)
             model_input.window.add_target_token(target)
-            embedding = self.lemma_embedding_dict.get_output_embedding(target).embedding
+            embedding = self.lemma_embedding_dict.get_embedding(target).embedding
             encoded_inputs.append(encoded_input)
             encoded_outputs.append(embedding)
         
@@ -178,7 +179,7 @@ class GlpNetwork:
                     input_vec = F.normalize(input_vec, p=2, dim=1)        
                     prediction = self.glp_network(input_vec).squeeze(0)
                     prediction = F.normalize(prediction, p=2, dim=0)
-                    embedding = self.lemma_embedding_dict.get_output_embedding(target)
+                    embedding = self.lemma_embedding_dict.get_embedding(target)
                     embedding.update(prediction.tolist(), alpha)
 
         # Update prediction matrix
@@ -189,7 +190,7 @@ class GlpNetwork:
                 input_vec = F.normalize(input_vec, p=2, dim=1)
 
                 # Output vector
-                embedding = self.lemma_embedding_dict.get_output_embedding(target).embedding
+                embedding = self.lemma_embedding_dict.get_embedding(target).embedding
                 output_vec = torch.tensor([embedding], dtype=torch.float32)
                 output_vec = F.normalize(output_vec, p=2, dim=1)
                 
@@ -211,10 +212,10 @@ class GlpNetwork:
     def propose(self, params: WriterParams, model_input: ModelInput):
         # Deterministic end of line after end punctuation
         if model_input.window.last_token().is_end_punctuation():
-            return [TokenLogit(Token.EOL, Token.EOL, 1.0)]
+            return [TokenLogit(TargetToken.EOL, 1.0)]
                         
         # Determine incompatible tokens
-        min_tokens = params.min_words * 2
+        min_tokens = params.min_words
         incompatible_grammar = RULE_BASED.determine_incompatible_grammar(model_input, min_tokens)
         incompatible_lemma = RULE_BASED.determine_incompatible_lemma(model_input)
 
@@ -223,8 +224,7 @@ class GlpNetwork:
         # This mode uses the graph for target routing like DMLG
         if params.enable_paging:
             # PAGE ROUTING: use page graph transitions, default to first page with EOL
-            last_lemma = model_input.window.last_lemma_token()
-            page = self.pages.get(last_lemma, self.page_list[0])    
+            page = self.pages.get(model_input.window.last_token().text, self.page_list[0])
             output_tokens = page.output_tokens
         # This mode uses only the MLP over the full vocab
         else:
@@ -254,14 +254,14 @@ class GlpNetwork:
             if not tok.grammar.text in incompatible_grammar and \
                not tok.lemma.lower_text in incompatible_lemma:
                 emb = torch.tensor(
-                    self.lemma_embedding_dict.get_output_embedding(tok).embedding,
+                    self.lemma_embedding_dict.get_embedding(tok).embedding,
                     dtype=torch.float32,
                 )                
                 emb = F.normalize(emb, p=2, dim=0)
                 matrix_logit = score(emb, matrix_pred)
                 mlp_logit = score(emb, mlp_pred)
                 logit = matrix_logit + mlp_logit
-                page_pairs.append(TokenLogit(grammar=tok.grammar, lemma=tok.lemma, logit=logit))
+                page_pairs.append(TokenLogit(token=tok, logit=logit))
 
         # Sort pairs and return
         page_pairs.sort(key=lambda t: t.logit, reverse=True)

@@ -30,7 +30,6 @@ class Configuration:
     history_alpha = [0.92, 0.95, 0.98]
     
     last_embeddings: int = 15
-    last_embedding_size: int = 16
 
     # ------------------------------------------------------------
     # Curriculum parameters
@@ -60,8 +59,8 @@ class Configuration:
         )
 
     def generator_current_context_size(self) -> int:
-        # current sentence position (1) + punctuation (1)
-        return 2 * self.last_embeddings * self.last_embedding_size + 2
+        # current sentence position (1)
+        return self.last_embeddings * self.token_embedding_dimension + 1
 
     def get_cas_vector_size(self) -> int:
         if hasattr(self, "cas_vector_size"):
@@ -83,5 +82,5 @@ class Configuration:
                self.get_cas_vector_size() + 2
 
     def generator_output_size(self) -> int:
-        # token embedding
+        # token embedding dimension
         return self.token_embedding_dimension

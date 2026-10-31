@@ -30,45 +30,33 @@ HISTORY_BLACKLIST = {
 @dataclass
 class CurrentSentence:
     lemma_embedding_dict: any
-    divider: float    
+    divider: float
     amount: int
-    size: int
 
     def clear(self):
-        emb = self.lemma_embedding_dict.get_input_embedding(Token.EOL).embedding[:self.size]
-        self.grammar = emb * self.amount
-        self.lemma = emb * self.amount
+        emb = self.lemma_embedding_dict.get_embedding(TargetToken.EOL).embedding
+        self.tokens = emb * self.amount
         self.position = 0
-        self.punctuation = 0.0
-        
-    def add(self, token: Token):
-        emb = self.lemma_embedding_dict.get_input_embedding(token).embedding[:self.size]        
-        if token.is_lemma():
-            self.position += 1
-            self.punctuation = 0.0
-            self.lemma = emb + self.lemma[: len(self.lemma) - self.size]
-        elif token.is_terminal():
-            self.position += 1
-            self.punctuation = 1.0
-        else:
-            self.punctuation = 0.0
-            self.grammar = emb + self.grammar[: len(self.grammar) - self.size]
-  
+    
+    def add(self, token: TargetToken):
+        emb = self.lemma_embedding_dict.get_embedding(token).embedding
+        self.tokens = emb + self.tokens[:-len(emb)]
+        self.position += 1
+    
     def get(self):
         cur_pos = self.position / self.divider
-        return self.grammar + self.lemma + [self.punctuation] + [cur_pos]
+        return self.tokens + [cur_pos]
     
     def copy(self) -> "CurrentSentence":
-        copy = CurrentSentence(self.lemma_embedding_dict, self.divider, self.amount, self.size)
-        copy.grammar = self.grammar.copy()
-        copy.lemma = self.lemma.copy()
+        copy = CurrentSentence(self.lemma_embedding_dict, self.divider, self.amount)
+        copy.tokens = self.tokens.copy()
         copy.position = self.position
-        copy.punctuation = self.punctuation
         return copy
 
 # ============================================================
 # Token History
 # ============================================================
+
 @dataclass
 class TokenHistory:
     dimension: int
@@ -153,8 +141,7 @@ class ContextWindow:
         self._current_sentence = CurrentSentence(
             self.lemma_embedding_dict,
             self.configuration.position_divider,
-            self.configuration.last_embeddings,
-            self.configuration.last_embedding_size)
+            self.configuration.last_embeddings)
 
         self.clear_current_sentence()
 
@@ -164,10 +151,6 @@ class ContextWindow:
 
         self._current_tokens = []
         self._current_sentence.clear()
-
-        self._last_token = Token.EOL
-        self._forelast_token = Token.EOL
-        self._last_lemma = Token.EOL
         
     def start_sentence(self):
         for i in range(len(self._token_histories)):
@@ -176,38 +159,32 @@ class ContextWindow:
         self.clear_current_sentence()
 
     def last_token(self) -> Token:
-        return self._last_token
+        if self._current_tokens:
+            return self._current_tokens[-1].lemma
+        return Token.EOL
 
     def forelast_token(self) -> Token:
-        return self._forelast_token
-
-    def last_lemma_token(self) -> str:
-        if self._last_token.is_eol():
-            return Token.EOL.text
-        return self._last_lemma.text
-
-    def add_token(self, token: Token):
-        self._current_tokens.append(token)
-        self._current_sentence.add(token)
-        self._forelast_token = self._last_token
-        self._last_token = token
-
-        if token.is_eol():
-            self._last_lemma = token
-
-        elif token.is_lemma():
-            self._last_lemma = token
-            if self._forelast_token.text in HISTORY_TOKENS and \
-                token.text not in HISTORY_BLACKLIST:
-                    emb = self.lemma_embedding_dict.get_input_embedding(token).embedding
-                    for token_history in self._token_histories:
-                        token_history.add(emb)
+        if self._current_tokens:
+            last: TargetToken = self._current_tokens[-1]
+            if last.lemma.is_lemma():
+                return last.grammar
+            if len(self._current_tokens) == 1:
+                return Token.EOL
+            forelast: TargetToken = self._current_tokens[-2]
+            return forelast.lemma
+        return Token.EOL
     
     def add_target_token(self, token: TargetToken):
-        self.add_token(token.grammar)
-        if token.lemma.is_lemma():
-            self.add_token(token.lemma)
-    
+        self._current_tokens.append(token)
+        self._current_sentence.add(token)
+        
+        if token.lemma.is_lemma() and \
+            token.grammar.text in HISTORY_TOKENS and \
+            token.lemma.text not in HISTORY_BLACKLIST:
+            emb = self.lemma_embedding_dict.get_embedding(token).embedding
+            for token_history in self._token_histories:
+                token_history.add(emb)
+            
     def update_sentence_memory(self, vector: List[float]):
         self._sentence_memory = vector + self._sentence_memory[:-len(vector)]
         
@@ -223,9 +200,6 @@ class ContextWindow:
 
         ctx._current_tokens = self._current_tokens.copy()        
         ctx._current_sentence = self._current_sentence.copy()
-        ctx._last_token = self._last_token
-        ctx._forelast_token = self._forelast_token
-        ctx._last_lemma = self._last_lemma
 
         ctx._cas_vector = self._cas_vector
         ctx._entity_tracker = self._entity_tracker.copy()
@@ -244,7 +218,7 @@ class ContextWindow:
         return self._cas_vector
     
     @property
-    def current_tokens(self) -> List[Token]:
+    def current_tokens(self) -> List[TargetToken]:
         return self._current_tokens
             
     def get_current_embedding(self) -> List[float]:

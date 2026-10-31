@@ -126,25 +126,19 @@ class RuleBasedFilter:
             if model_input.window.forelast_token().text in CONJUGATION_TOKENS:
                 incompatible.update(["'s", "'"])
 
-            # repeat with intermediate word (A B A)
-            if len(current_tokens) >= 4:
-                incompatible.add(current_tokens[-3].lower_text)
-
-            # repeat with intermediate word (A B A B)            
-            if len(current_tokens) >= 6:
-                cut = current_tokens[-5:]
-                if cut[0].lower_text == cut[4].lower_text:
-                    incompatible.add(cut[2].lower_text)
-            
+            # repeat with intermediate word (A B A) and (A B A B)
+            if len(current_tokens) >= 2:
+                incompatible.add(current_tokens[-2].lemma.lower_text)
+                        
             # trigram repeat (A B C A B C)
-            if len(current_tokens) >= 10:
-                cut = current_tokens[-9:]
-                if cut[0].lower_text == cut[6].lower_text and \
-                   cut[2].lower_text == cut[8].lower_text:
-                    incompatible.add(cut[4].lower_text)                
+            if len(current_tokens) >= 5:
+                cut = current_tokens[-5:]
+                if cut[0].lemma.lower_text == cut[3].lemma.lower_text and \
+                   cut[1].lemma.lower_text == cut[4].lemma.lower_text:
+                    incompatible.add(cut[2].lemma.lower_text)
         
         return incompatible
-            
+        
     def determine_incompatible_grammar(self, model_input: ModelInput, min_tokens: int) -> set:        
         incompatible = set()
         
@@ -183,7 +177,7 @@ class RuleBasedFilter:
             if last.lower_text in BAD_END or forelast.text in NO_PUNCTUATION_TOKENS:
                 incompatible.update(ALL_PUNCTIATION_TOKENS)
             elif len(current_tokens) < min_tokens or \
-                not any(t.text.startswith("<VERB-") for t in current_tokens):
+                not any(t.grammar.text.startswith("<VERB-") for t in current_tokens):
                 incompatible.update(END_PUNCTIATION_TOKENS)
                 
             # Plural noun directly after a or an

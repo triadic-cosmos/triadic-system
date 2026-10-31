@@ -47,7 +47,7 @@ HISTORY_TOKENS = {
     "<VERB-PAST>",
     "<VERB-ING>",
     "<VERB-INGV>",
-    "<VERB-PERFECT>",    
+    "<VERB-PERFECT>",
     "<NOUN>",
     "<NOUN-PLURAL>",
     "<PROPN>",
@@ -187,7 +187,6 @@ class Token:
     def __eq__(self, other):
         return isinstance(other, Token) and self._text == other._text
 
-
 # Initialize static tokens
 Token.EOL = Token("<EOL>") # end of line
 Token.SOC = Token("<SOC>") # start of chapter
@@ -197,16 +196,6 @@ Token.EXCLAMATION = Token("<EXCLAMATION>")
 Token.QUESTION = Token("<QUESTION>")
 Token.COMMA = Token("<COMMA>")
 Token.NONE = Token("<NONE>")
-
-# ============================================================
-# TokenLogit
-# ============================================================
-
-@dataclass(frozen=True)
-class TokenLogit:
-    grammar: Token
-    lemma: Token
-    logit: float
 
 # ============================================================
 # TargetToken
@@ -220,7 +209,17 @@ class TargetToken:
     def get_key(self):
         return (self.grammar.id * 100_000_000) + self.lemma.id
 
+TargetToken.EOL = TargetToken(Token.EOL, Token.EOL)
 TargetToken.PERIOD = TargetToken(Token.PERIOD, Token.PERIOD)
+
+# ============================================================
+# TokenLogit
+# ============================================================
+
+@dataclass(frozen=True)
+class TokenLogit:
+    token: TargetToken
+    logit: float
 
 # ============================================================
 # TokenPage
@@ -325,60 +324,17 @@ class LearnedTokenEmbedding:
 # ============================================================
 
 class LemmaEmbeddingDictionary:
-    def __init__(self, input_dimension: int, output_dimension: int):
-        self.input_embeddings: Dict[int, LearnedTokenEmbedding] = {}
-        self.output_embeddings: Dict[int, LearnedTokenEmbedding] = {}
-        self.fixed_output_embeddings: Dict[int, LearnedTokenEmbedding] = {}
-        self.input_dimension = input_dimension
-        self.output_dimension = output_dimension
-
-    def get_input_embedding(self, lemma: Token) -> LearnedTokenEmbedding:
-        embedding = self.input_embeddings.get(lemma._id)
-        if embedding:
-            return embedding
-        embedding = LearnedTokenEmbedding.create(lemma, self.input_dimension)
-        self.input_embeddings[lemma._id] = embedding
-        return embedding
-
-    def get_output_embedding(self, target: TargetToken) -> LearnedTokenEmbedding:
-        key = target.get_key()
-        embedding = self.output_embeddings.get(key)
-        if embedding:
-            return embedding
-        embedding = LearnedTokenEmbedding.create_from_id(key, self.output_dimension)
-        self.output_embeddings[key] = embedding
-        return embedding
-
-    def get_fixed_output_embedding(self, target: TargetToken) -> LearnedTokenEmbedding:
-        key = target.get_key()
-        embedding = self.fixed_output_embeddings.get(key)
-        if embedding:
-            return embedding
-        embedding = LearnedTokenEmbedding.create_from_id(key, self.output_dimension)
-        self.fixed_output_embeddings[key] = embedding
-        return embedding
-
-class LemmaEmbeddingDictionary:
     def __init__(self, dimension: int):
-        self.input_embeddings: Dict[int, LearnedTokenEmbedding] = {}
-        self.output_embeddings: Dict[int, LearnedTokenEmbedding] = {}
+        self.embeddings: Dict[int, LearnedTokenEmbedding] = {}
         self.dimension = dimension
 
-    def get_input_embedding(self, lemma: Token) -> LearnedTokenEmbedding:
-        embedding = self.input_embeddings.get(lemma._id)
-        if embedding:
-            return embedding
-        embedding = LearnedTokenEmbedding.create(lemma, self.dimension)
-        self.input_embeddings[lemma._id] = embedding
-        return embedding
-
-    def get_output_embedding(self, target: TargetToken) -> LearnedTokenEmbedding:
+    def get_embedding(self, target: TargetToken) -> LearnedTokenEmbedding:
         key = target.get_key()
-        embedding = self.output_embeddings.get(key)
+        embedding = self.embeddings.get(key)
         if embedding:
             return embedding
         embedding = LearnedTokenEmbedding.create_from_id(key, self.dimension)
-        self.output_embeddings[key] = embedding
+        self.embeddings[key] = embedding
         return embedding
 
     def get_sentence_embedding(self, targets: List[TargetToken]) -> List[float]:        
@@ -390,7 +346,7 @@ class LemmaEmbeddingDictionary:
                target.grammar.is_paragraph() or \
                target.grammar.is_eol():
                 continue
-            embedding = self.get_output_embedding(target)
+            embedding = self.get_embedding(target)
             vec = np.array(embedding.embedding, dtype=np.float32)
             vectors.append(vec)
             

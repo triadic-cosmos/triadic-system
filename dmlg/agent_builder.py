@@ -39,8 +39,8 @@ class TrainingBatchBuilder:
             self.agent.glp_network.convert_to_target_tokens(sentence.tokens)
             
         # Update context
-        for token in sentence.tokens:
-            context.add_token(token)
+        for token in target_tokens:
+            context.add_target_token(token)
         self.update_context(sentence, context)
         target_vector = self.agent.glp_network.lemma_embedding_dict.get_sentence_embedding(target_tokens)
         context.update_sentence_memory(target_vector)        
