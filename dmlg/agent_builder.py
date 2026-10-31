@@ -32,7 +32,7 @@ class TrainingBatchBuilder:
 
     def build_sentence(self, index: int, sentence: CurriculumSentence, line_position: List[float], context: ContextWindow):
         # Create model input
-        model_input = ModelInput(context.copy_full(), line_position, True, True)
+        model_input = ModelInput(context.copy(), line_position, True, True)
             
         # Convert to target tokens
         target_tokens: List[TargetToken] = \

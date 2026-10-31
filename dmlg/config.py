@@ -11,8 +11,7 @@ class Configuration:
     # ------------------------------------------------------------
     first_hidden_size: int = 256
     other_hidden_size: int = 256
-    lemma_input_dimension: int = 64
-    lemma_output_dimension: int = 64
+    token_embedding_dimension: int = 64
     total_pages: int = 1000000
     max_page_input_size: int = 1
     
@@ -78,11 +77,11 @@ class Configuration:
     def generator_token_input_size(self) -> int:
         # line position (1) + paragraph position (1) = 2
         return self.generator_current_context_size() + \
-               self.narrative_sentences * self.lemma_output_dimension + \
+               self.narrative_sentences * self.token_embedding_dimension + \
                self.tracker_entities + \
                sum(self.history_size) + \
                self.get_cas_vector_size() + 2
 
     def generator_output_size(self) -> int:
-        # lemma embedding
-        return self.lemma_output_dimension
+        # token embedding
+        return self.token_embedding_dimension

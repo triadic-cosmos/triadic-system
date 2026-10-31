@@ -147,7 +147,7 @@ class ContextWindow:
         self._entity_tracker = EntityTracker(self.tracking, self.configuration.tracker_alpha)
 
         self._sentence_memory = [0] * self.configuration.narrative_sentences \
-                                    * self.configuration.lemma_output_dimension
+                                    * self.configuration.token_embedding_dimension
         
         self._current_tokens = []
         self._current_sentence = CurrentSentence(
@@ -179,11 +179,6 @@ class ContextWindow:
         return self._last_token
 
     def forelast_token(self) -> Token:
-        return self._forelast_token
-
-    def last_grammar_token(self) -> Token:
-        if self._last_token.is_grammar():
-            return self._last_token
         return self._forelast_token
 
     def last_lemma_token(self) -> str:
@@ -219,28 +214,22 @@ class ContextWindow:
     def update_entity_tracking(self, tokens: List[Token]):
         self._entity_tracker.update_from_sentence(tokens)
     
-    def copy_current(self) -> "ContextWindow":
+    def copy(self) -> "ContextWindow":
         ctx: ContextWindow = ContextWindow(self.configuration, self.lemma_embedding_dict, self.tracking)
 
         for i in range(len(self._token_histories)):
             ctx._token_histories[i] = self._token_histories[i].copy()
             ctx._token_histories_start[i] = self._token_histories_start[i]                                                            
 
-        ctx._cas_vector = self._cas_vector
-
         ctx._current_tokens = self._current_tokens.copy()        
         ctx._current_sentence = self._current_sentence.copy()
         ctx._last_token = self._last_token
         ctx._forelast_token = self._forelast_token
         ctx._last_lemma = self._last_lemma
-        return ctx
-    
-    def copy_full(self) -> "ContextWindow":
-        ctx = self.copy_current()
+
+        ctx._cas_vector = self._cas_vector
         ctx._entity_tracker = self._entity_tracker.copy()
-        
         ctx._sentence_memory = self._sentence_memory.copy()
-        
         return ctx
         
     def set_cas_vector(self, cas_vector: List[float]):
@@ -285,7 +274,7 @@ class ModelInput:
     allow_paragraph: bool
     
     def copy(self) -> "ModelInput":
-        return ModelInput(self.window.copy_full(), self.line_position, True, True)
+        return ModelInput(self.window.copy(), self.line_position, True, True)
 
 # ============================================================
 # InputEncoder

@@ -359,18 +359,16 @@ class LemmaEmbeddingDictionary:
         return embedding
 
 class LemmaEmbeddingDictionary:
-    def __init__(self, input_dimension: int, output_dimension: int):
+    def __init__(self, dimension: int):
         self.input_embeddings: Dict[int, LearnedTokenEmbedding] = {}
         self.output_embeddings: Dict[int, LearnedTokenEmbedding] = {}
-        self.fixed_output_embeddings: Dict[int, LearnedTokenEmbedding] = {}
-        self.input_dimension = input_dimension
-        self.output_dimension = output_dimension
+        self.dimension = dimension
 
     def get_input_embedding(self, lemma: Token) -> LearnedTokenEmbedding:
         embedding = self.input_embeddings.get(lemma._id)
         if embedding:
             return embedding
-        embedding = LearnedTokenEmbedding.create(lemma, self.input_dimension)
+        embedding = LearnedTokenEmbedding.create(lemma, self.dimension)
         self.input_embeddings[lemma._id] = embedding
         return embedding
 
@@ -379,18 +377,8 @@ class LemmaEmbeddingDictionary:
         embedding = self.output_embeddings.get(key)
         if embedding:
             return embedding
-        embedding = LearnedTokenEmbedding.create_from_id(key, self.output_dimension)
+        embedding = LearnedTokenEmbedding.create_from_id(key, self.dimension)
         self.output_embeddings[key] = embedding
-        return embedding
-
-    def get_fixed_output_embedding(self, target: TargetToken) -> LearnedTokenEmbedding:
-        key = target.get_key()
-        embedding = self.fixed_output_embeddings.get(key)
-        if embedding:
-            return embedding
-        # create only the semantic embedding without 4 structural dimensions
-        embedding = LearnedTokenEmbedding.create_from_id(key, self.output_dimension)
-        self.fixed_output_embeddings[key] = embedding
         return embedding
 
     def get_sentence_embedding(self, targets: List[TargetToken]) -> List[float]:        
@@ -402,7 +390,7 @@ class LemmaEmbeddingDictionary:
                target.grammar.is_paragraph() or \
                target.grammar.is_eol():
                 continue
-            embedding = self.get_fixed_output_embedding(target)
+            embedding = self.get_output_embedding(target)
             vec = np.array(embedding.embedding, dtype=np.float32)
             vectors.append(vec)
             

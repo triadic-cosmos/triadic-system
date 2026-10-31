@@ -131,9 +131,7 @@ class GlpNetwork:
         return target_tokens
 
     def create_lemma_embedding_dictionary(self) -> LemmaEmbeddingDictionary:
-        return LemmaEmbeddingDictionary(
-                self.configuration.lemma_input_dimension,
-                self.configuration.lemma_output_dimension)
+        return LemmaEmbeddingDictionary(self.configuration.token_embedding_dimension)
        
     # ------------------------------------------------------------
     # Learning

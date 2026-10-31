@@ -235,7 +235,7 @@ class TriadicIterativeNarrator:
                 print(f"Generating chapter {chapter_nr} at line {line_nr}")
                 
                 # Generate chapter
-                copy_ctx = ctx.copy_full()
+                copy_ctx = ctx.copy()
                 story: WriterStory = self.writer.agent.write_chapter(
                     line_nr, self.params.max_lines, copy_ctx, self.writer_params)
                 chapter = TriadicNarratorChapter(story.to_natural())
@@ -360,7 +360,7 @@ class TriadicPromptNarrator:
                 print(f"Generating chapter {chapter_nr} at line {line_nr}")
                 
                 # Generate chapter
-                copy_ctx = ctx.copy_full()
+                copy_ctx = ctx.copy()
                 story: WriterStory = self.writer.agent.write_chapter(
                     line_nr, self.params.max_lines, copy_ctx, self.writer_params)
                 chapter = TriadicNarratorChapter(story.to_natural())
