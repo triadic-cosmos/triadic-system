@@ -169,3 +169,14 @@ class AgentBuilder:
             agent.save(self.model_filename(environment))
 
         agent.show_predictor()
+
+    def evaluate_agent(self, environment: WriterEnvironment, curriculum: List[Curriculum]):
+        print("Evaluating agent from curriculum...")
+
+        agent: WriterAgent = self.load_or_create_agent(environment)
+        
+        training_builder: TrainingBatchBuilder = TrainingBatchBuilder(agent)
+        combined_curriculum: Curriculum = training_builder.build_curriculum(
+            curriculum, self.configuration.get_cas_vector_size())
+        
+        agent.evaluate_curriculum(combined_curriculum)

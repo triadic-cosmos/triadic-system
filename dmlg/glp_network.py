@@ -24,6 +24,20 @@ from .tokens import (
 RULE_BASED: RuleBasedFilter = RuleBasedFilter()
 
 # ============================================================
+# Evaluation
+# ============================================================
+
+@dataclass
+class Evaluation:
+    target: TargetToken
+    matrix: float
+    mlp: float
+    combined: float
+    allowed: bool
+    grammar_blocked: bool    
+    lemma_blocked: bool
+
+# ============================================================
 # GlpNetwork
 # ============================================================
 
@@ -172,7 +186,7 @@ class GlpNetwork:
         self.glp_network.opt.step()
 
         # Update token embeddings
-        if True:
+        if alpha > 0.0:
             with torch.no_grad():        
                 for index, target in enumerate(sample.target_tokens):
                     input_vec = torch.tensor([encoded_inputs[index]], dtype=torch.float32)
@@ -205,6 +219,81 @@ class GlpNetwork:
 
             self.predictor_matrix = self.predictor_matrix.detach()
 
+    # ------------------------------------------------------------
+    # Evaluate model with a curriculum sentence
+    # ------------------------------------------------------------
+
+    def evaluate(self, sample: TrainingSampleSentence) -> List[Evaluation]:
+        evaluations = []        
+        model_input = sample.model_input.copy()
+        model_input.window.start_sentence()
+
+        for target in sample.target_tokens:
+            # Encode input
+            page: TokenPage = self.pages.get(model_input.window.last_token().text, self.page_list[0])            
+            encoded_input = self.encoder.encode_token(model_input)
+            incompatible_grammar = RULE_BASED.determine_incompatible_grammar(model_input, 1)
+            incompatible_lemma = RULE_BASED.determine_incompatible_lemma(model_input)            
+            model_input.window.add_target_token(target)
+
+            # Infer proposal 
+            with torch.no_grad():
+                x = torch.tensor([encoded_input], dtype=torch.float32)
+                matrix_pred = self.predictor_matrix @ x.squeeze()
+                matrix_pred = F.normalize(matrix_pred, p=2, dim=0)
+                mlp_pred = self.glp_network(x).squeeze(0)
+                mlp_pred = F.normalize(mlp_pred, p=2, dim=0)
+
+            # Score all output tokens
+            matrix_logits: List[float] = []
+            mlp_logits: List[float] = []
+            logits: List[float] = []            
+            target_logits: List[float] = None
+            
+            # Check all possible output tokens for page
+            for tok in page.output_tokens:
+                if tok == target or \
+                   (tok.grammar.text not in incompatible_grammar and \
+                    tok.lemma.lower_text not in incompatible_lemma):
+                    emb = torch.tensor(
+                        self.lemma_embedding_dict.get_embedding(tok).embedding,
+                        dtype=torch.float32,
+                    )                
+                    emb = F.normalize(emb, p=2, dim=0)
+                    
+                    matrix_logit = score(emb, matrix_pred)                    
+                    mlp_logit = score(emb, mlp_pred)
+                    logit = matrix_logit + mlp_logit
+                    
+                    if tok == target:
+                        # target candidate logits
+                        target_logits = [matrix_logit, mlp_logit, logit]
+                    else:
+                        # other candidate logits
+                        matrix_logits.append(matrix_logit)
+                        mlp_logits.append(mlp_logit)
+                        logits.append(logit)
+
+            # Create evaluation
+            grammar_blocked = target.grammar.text in incompatible_grammar
+            lemma_blocked = target.lemma.lower_text in incompatible_lemma
+            allowed = not grammar_blocked and not lemma_blocked
+            if logits:
+                matrix_logits.sort(reverse=True)
+                mlp_logits.sort(reverse=True)
+                logits.sort(reverse=True)
+                evaluations.append(Evaluation(
+                    target,
+                    target_logits[0] - matrix_logits[0],
+                    target_logits[1] - mlp_logits[0],
+                    target_logits[2] - logits[0],
+                    allowed, grammar_blocked, lemma_blocked))
+            else:
+                evaluations.append(
+                    Evaluation(target, 0, 0, 0, allowed, grammar_blocked, lemma_blocked))
+                 
+        return evaluations
+        
     # ------------------------------------------------------------
     # Inference
     # ------------------------------------------------------------

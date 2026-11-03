@@ -15,7 +15,7 @@ from .writer_environment import WriterEnvironment
 from .writer_story import WriterStory, WriterSentence, WriterParams
 from .tokens import Token, TokenLogit, TargetToken
 from .context import ContextWindow, ModelInput
-from .glp_network import GlpNetwork
+from .glp_network import GlpNetwork, Evaluation
 from .training import TrainingSampleSentence
 from .curriculum import Curriculum, CurriculumSentence
 from .entity_tracker import TrackerMap
@@ -88,7 +88,70 @@ class WriterAgent:
             print(epoch)
         self.training_epochs += random_epochs
         self.show()
+
+    # ------------------------------------------------------------
+    # Evaluation
+    # ------------------------------------------------------------
+
+    def evaluate_curriculum(self, curriculum: Curriculum):
+        sentences = 0
+        samples = 0
+        allowed = 0
+        both_blocked = 0
+        grammar_blocked = 0
+        lemma_blocked = 0
+        top_matrix = 0
+        top_mlp = 0
+        top_combined = 0        
+        total_matrix = 0 
+        total_mlp = 0 
+        total_combined = 0
         
+        for index, sentence in enumerate(curriculum.sentences):
+            sentences += 1
+            evaluations: List[Evaluation] = self.glp_network.evaluate(sentence.sample)
+            targets: List[str] = []
+            
+            for pos, evaluation in enumerate(evaluations):
+                samples += 1
+                if evaluation.allowed:
+                    allowed += 1
+                if evaluation.grammar_blocked and evaluation.lemma_blocked:
+                    both_blocked += 1
+                if evaluation.grammar_blocked:
+                    grammar_blocked += 1
+                if evaluation.lemma_blocked:
+                    lemma_blocked += 1
+                if evaluation.matrix >= 0:
+                    top_matrix += 1
+                if evaluation.mlp >= 0:
+                    top_mlp += 1
+                if evaluation.combined >= 0:
+                    top_combined += 1
+                total_matrix += evaluation.matrix
+                total_mlp += evaluation.mlp
+                total_combined += evaluation.combined
+                if evaluation.allowed:
+                    targets.append(evaluation.target.lemma.text)
+                else:
+                    targets.append(f"[{evaluation.target.lemma.text}]")
+            
+            print(f"[{index}] {' '.join(targets)}")
+
+        print("=== Evaluation ===")
+        print(f"sentences = {sentences}")
+        print(f"samples = {samples}")
+        print(f"allowed = {allowed}")
+        print(f"both blocked = {both_blocked}")
+        print(f"grammar blocked = {grammar_blocked}")
+        print(f"lemma blocked = {lemma_blocked}")
+        print(f"top matrix = {top_matrix}")
+        print(f"top mlp = {top_mlp}")
+        print(f"top combined = {top_combined}")
+        print(f"total matrix = {total_matrix}")
+        print(f"total mlp = {total_mlp}")
+        print(f"total combined = {total_combined}")
+  
     # ------------------------------------------------------------
     # Logging
     # ------------------------------------------------------------
