@@ -42,6 +42,7 @@ class WriterAgent:
         self.id = id
         self.rng = random.Random()
         self.glp_network = GlpNetwork(self.configuration)
+        self.tracking = None
 
     def __str__(self):
         return f"[{self.id}] trainings = {self.training_count}"

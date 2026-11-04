@@ -89,22 +89,26 @@ class EntityTracker:
     alpha: float
  
     def __post_init__(self):
-        self.state = [0] * len(self.tracking)
+        if self.tracking:
+            self.state = [0] * len(self.tracking)
+        else:
+            self.state = []
 
     def get_state(self) -> List[float]:
         return self.state
 
     def update_from_sentence(self, tokens: List[Token]):
-        grammar = False
-        self.state = [t * self.alpha for t in self.state]
-        
-        for token in tokens:
-            if token.text in TRACKER_TOKENS:
-                grammar = True
-            elif grammar:
-                grammar = False
-                if token.text in self.tracking:
-                    self.state[self.tracking[token.text]] = 1.0
+        if self.state:
+            grammar = False
+            self.state = [t * self.alpha for t in self.state]
+            
+            for token in tokens:
+                if token.text in TRACKER_TOKENS:
+                    grammar = True
+                elif grammar:
+                    grammar = False
+                    if token.text in self.tracking:
+                        self.state[self.tracking[token.text]] = 1.0
      
     def copy(self) -> "EntityTracker":
         copy = EntityTracker(self.tracking, self.alpha)
