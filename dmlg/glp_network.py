@@ -30,9 +30,12 @@ RULE_BASED: RuleBasedFilter = RuleBasedFilter()
 @dataclass
 class Evaluation:
     target: TargetToken
+    candidates: int
     matrix: float
     mlp: float
-    combined: float
+    rank_matrix: int
+    rank_mlp: int
+    agreement: float
     allowed: bool
     grammar_blocked: bool    
     lemma_blocked: bool
@@ -229,68 +232,81 @@ class GlpNetwork:
         model_input.window.start_sentence()
 
         for target in sample.target_tokens:
-            # Encode input
-            page: TokenPage = self.pages.get(model_input.window.last_token().text, self.page_list[0])            
-            encoded_input = self.encoder.encode_token(model_input)
+            # Select page
+            page: TokenPage = self.pages.get(model_input.window.last_token().text, self.page_list[0])
+            if len(page.output_tokens) <= 1:
+                # Skip a fully deterministic choice
+                continue
+ 
+            # Do rule-based filtering
+            filtered_candidates = []
             incompatible_grammar = RULE_BASED.determine_incompatible_grammar(model_input, 1)
-            incompatible_lemma = RULE_BASED.determine_incompatible_lemma(model_input)            
-            model_input.window.add_target_token(target)
-
-            # Infer proposal 
-            with torch.no_grad():
-                x = torch.tensor([encoded_input], dtype=torch.float32)
-                matrix_pred = self.predictor_matrix @ x.squeeze()
-                matrix_pred = F.normalize(matrix_pred, p=2, dim=0)
-                mlp_pred = self.glp_network(x).squeeze(0)
-                mlp_pred = F.normalize(mlp_pred, p=2, dim=0)
-
-            # Score all output tokens
-            matrix_logits: List[float] = []
-            mlp_logits: List[float] = []
-            logits: List[float] = []            
-            target_logits: List[float] = None
-            
-            # Check all possible output tokens for page
+            incompatible_lemma = RULE_BASED.determine_incompatible_lemma(model_input)                        
+            # Prevent filtering of target
             for tok in page.output_tokens:
                 if tok == target or \
                    (tok.grammar.text not in incompatible_grammar and \
                     tok.lemma.lower_text not in incompatible_lemma):
-                    emb = torch.tensor(
-                        self.lemma_embedding_dict.get_embedding(tok).embedding,
-                        dtype=torch.float32,
-                    )                
-                    emb = F.normalize(emb, p=2, dim=0)
-                    
-                    matrix_logit = score(emb, matrix_pred)                    
-                    mlp_logit = score(emb, mlp_pred)
-                    logit = matrix_logit + mlp_logit
-                    
-                    if tok == target:
-                        # target candidate logits
-                        target_logits = [matrix_logit, mlp_logit, logit]
-                    else:
-                        # other candidate logits
-                        matrix_logits.append(matrix_logit)
-                        mlp_logits.append(mlp_logit)
-                        logits.append(logit)
+                    filtered_candidates.append(tok)
+            if len(filtered_candidates) <= 1:
+                # Skip a fully deterministic choice after filtering
+                continue
+            
+            # Encode input            
+            encoded_input = self.encoder.encode_token(model_input)
+            model_input.window.add_target_token(target)
+
+            # Infer proposal
+            with torch.no_grad():
+                x = torch.tensor([encoded_input], dtype=torch.float32)
+                matrix_pred = self.predictor_matrix @ x.squeeze()
+                mlp_pred = self.glp_network(x).squeeze(0)
+                matrix_pred = F.normalize(matrix_pred, p=2, dim=0)
+                mlp_pred = F.normalize(mlp_pred, p=2, dim=0)
+                agreement = torch.dot(matrix_pred, mlp_pred)
+
+            # Score all output tokens
+            matrix_logits: List[float] = []
+            mlp_logits: List[float] = []
+            target_logits: List[float] = None
+            
+            # Check all possible output tokens for page
+            for tok in filtered_candidates:
+                emb = torch.tensor(
+                    self.lemma_embedding_dict.get_embedding(tok).embedding,
+                    dtype=torch.float32,
+                )                
+                emb = F.normalize(emb, p=2, dim=0)
+                
+                matrix_logit = score(emb, matrix_pred)                    
+                mlp_logit = score(emb, mlp_pred)
+                
+                if tok == target:
+                    # target candidate logits
+                    target_logits = [matrix_logit, mlp_logit]
+                else:
+                    # other candidate logits
+                    matrix_logits.append(matrix_logit)
+                    mlp_logits.append(mlp_logit)
 
             # Create evaluation
             grammar_blocked = target.grammar.text in incompatible_grammar
             lemma_blocked = target.lemma.lower_text in incompatible_lemma
             allowed = not grammar_blocked and not lemma_blocked
-            if logits:
+            if matrix_logit and mlp_logits:
                 matrix_logits.sort(reverse=True)
                 mlp_logits.sort(reverse=True)
-                logits.sort(reverse=True)
                 evaluations.append(Evaluation(
-                    target,
+                    target, len(filtered_candidates),
                     target_logits[0] - matrix_logits[0],
                     target_logits[1] - mlp_logits[0],
-                    target_logits[2] - logits[0],
-                    allowed, grammar_blocked, lemma_blocked))
+                    rank(matrix_logits, target_logits[0]),
+                    rank(mlp_logits, target_logits[1]),
+                    agreement, allowed, grammar_blocked, lemma_blocked))
             else:
-                evaluations.append(
-                    Evaluation(target, 0, 0, 0, allowed, grammar_blocked, lemma_blocked))
+                evaluations.append(Evaluation(
+                    target, len(filtered_candidates), 0, 0, 1, 1,
+                    agreement, allowed, grammar_blocked, lemma_blocked))
                  
         return evaluations
         
@@ -302,7 +318,7 @@ class GlpNetwork:
         # Deterministic end of line after end punctuation
         if model_input.window.last_token().is_end_punctuation():
             return [TokenLogit(TargetToken.EOL, 1.0)]
-                        
+        
         # Determine incompatible tokens
         min_tokens = params.min_words
         incompatible_grammar = RULE_BASED.determine_incompatible_grammar(model_input, min_tokens)
@@ -329,7 +345,7 @@ class GlpNetwork:
             else:
                 # Use complete vocab in pageless mode
                 output_tokens = self.output_tokens
-                
+        
         # Infer proposal 
         with torch.no_grad():
             x = torch.tensor([self.encoder.encode_token(model_input)], dtype=torch.float32)
@@ -337,7 +353,9 @@ class GlpNetwork:
             matrix_pred = F.normalize(matrix_pred, p=2, dim=0)
             mlp_pred = self.glp_network(x).squeeze(0)
             mlp_pred = F.normalize(mlp_pred, p=2, dim=0)
-                                
+            combined_pred = 0.2 * matrix_pred + 0.8 * mlp_pred
+            combined_pred = F.normalize(combined_pred, p=2, dim=0)
+        
         # Create all eligible target token pairs
         for tok in output_tokens:
             if not tok.grammar.text in incompatible_grammar and \
@@ -347,9 +365,7 @@ class GlpNetwork:
                     dtype=torch.float32,
                 )                
                 emb = F.normalize(emb, p=2, dim=0)
-                matrix_logit = score(emb, matrix_pred)
-                mlp_logit = score(emb, mlp_pred)
-                logit = matrix_logit + mlp_logit
+                logit = score(emb, combined_pred)
                 page_pairs.append(TokenLogit(token=tok, logit=logit))
 
         # Sort pairs and return
@@ -357,7 +373,11 @@ class GlpNetwork:
         return page_pairs
 
 # Scoring function
-def score(embedding, prediction):
+def score(embedding, prediction) -> float:
     cos_score = torch.dot(prediction, embedding)
     l1_score = torch.mean(torch.abs(prediction - embedding))
     return cos_score - l1_score
+
+# Determine rank
+def rank(logits, logit) -> int:
+    return sum(l > logit for l in logits) + 1

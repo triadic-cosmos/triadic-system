@@ -100,12 +100,20 @@ class WriterAgent:
         both_blocked = 0
         grammar_blocked = 0
         lemma_blocked = 0
-        top_matrix = 0
-        top_mlp = 0
-        top_combined = 0        
+        top_both = 0
+        top_only_matrix = 0
+        top_only_mlp = 0
+        top_none = 0
         total_matrix = 0 
-        total_mlp = 0 
-        total_combined = 0
+        total_mlp = 0
+        candidates = []
+        agreements = []
+        matrix_ranks = []
+        mlp_ranks = []
+        matrix_reciprocal = []
+        mlp_reciprocal = []
+        matrix_relative = []
+        mlp_relative = []
         
         for index, sentence in enumerate(curriculum.sentences):
             sentences += 1
@@ -114,6 +122,9 @@ class WriterAgent:
             
             for pos, evaluation in enumerate(evaluations):
                 samples += 1
+                total_matrix += evaluation.matrix
+                total_mlp += evaluation.mlp
+                
                 if evaluation.allowed:
                     allowed += 1
                 if evaluation.grammar_blocked and evaluation.lemma_blocked:
@@ -122,36 +133,92 @@ class WriterAgent:
                     grammar_blocked += 1
                 if evaluation.lemma_blocked:
                     lemma_blocked += 1
-                if evaluation.matrix >= 0:
-                    top_matrix += 1
-                if evaluation.mlp >= 0:
-                    top_mlp += 1
-                if evaluation.combined >= 0:
-                    top_combined += 1
-                total_matrix += evaluation.matrix
-                total_mlp += evaluation.mlp
-                total_combined += evaluation.combined
+                    
+                top_matrix = evaluation.rank_matrix == 1
+                top_mlp = evaluation.rank_mlp == 1
+                if top_matrix and top_mlp:
+                    top_both += 1
+                elif top_matrix:
+                    top_only_matrix += 1
+                elif top_mlp:
+                    top_only_mlp += 1
+                else:
+                    top_none += 1
+                
+                candidates.append(evaluation.candidates)
+                agreements.append(evaluation.agreement)
+                matrix_ranks.append(evaluation.rank_matrix)
+                mlp_ranks.append(evaluation.rank_mlp)
+                matrix_reciprocal.append(1 / evaluation.rank_matrix)
+                mlp_reciprocal.append(1 / evaluation.rank_mlp)
+                matrix_relative.append(evaluation.rank_matrix / evaluation.candidates)
+                mlp_relative.append(evaluation.rank_mlp / evaluation.candidates)
+                
                 if evaluation.allowed:
                     targets.append(evaluation.target.lemma.text)
                 else:
                     targets.append(f"[{evaluation.target.lemma.text}]")
             
             print(f"[{index}] {' '.join(targets)}")
+            
+        candidates.sort()
+        agreements.sort()
+        matrix_ranks.sort()
+        mlp_ranks.sort()
+        matrix_reciprocal.sort()
+        mlp_reciprocal.sort()
+        matrix_relative.sort()
+        mlp_relative.sort()
+        
+        median_index = samples // 2
+        p10_index = samples // 10
+        p90_index = (9 * samples) // 10
 
         print("=== Evaluation ===")
         print(f"sentences = {sentences}")
         print(f"samples = {samples}")
+        print("--- Candidates ---")
+        print(f"avg = {sum(candidates) / samples:.1f}")
+        print(f"median = {candidates[median_index]}")
+        print(f"max = {max(candidates)}")
+        print("--- Rule Based ---")
         print(f"allowed = {allowed}")
         print(f"both blocked = {both_blocked}")
         print(f"grammar blocked = {grammar_blocked}")
         print(f"lemma blocked = {lemma_blocked}")
-        print(f"top matrix = {top_matrix}")
-        print(f"top mlp = {top_mlp}")
-        print(f"top combined = {top_combined}")
-        print(f"total matrix = {total_matrix}")
-        print(f"total mlp = {total_mlp}")
-        print(f"total combined = {total_combined}")
-  
+        print("--- Total Distance ---")
+        print(f"matrix = {total_matrix:.5f}")
+        print(f"MLP = {total_mlp:.5f}")
+        print("--- Agreement ---")
+        print(f"min = {min(agreements):.5f}")
+        print(f"max = {max(agreements):.5f}")        
+        print(f"avg = {sum(agreements) / samples:.5f}")
+        print(f"median = {agreements[median_index]:.5f}")
+        print(f"p10 = {agreements[p10_index]:.5f}")
+        print(f"p90 = {agreements[p90_index]:.5f}")
+        print("--- Rank Matrix ---")
+        print(f"avg = {sum(matrix_ranks) / samples:.1f}")
+        print(f"median = {matrix_ranks[median_index]}")
+        print(f"repiprocal avg = {sum(matrix_reciprocal) / samples:.3f}")
+        print(f"reciprocal median = {matrix_reciprocal[median_index]:.3f}")
+        print(f"relative avg = {sum(matrix_relative) / samples:.3f}")
+        print(f"relative median = {matrix_relative[median_index]:.3f}")
+        print("--- Rank MLP ---")
+        print(f"avg = {sum(mlp_ranks) / samples:.1f}")
+        print(f"median = {mlp_ranks[median_index]}")
+        print(f"repiprocal avg = {sum(mlp_reciprocal) / samples:.3f}")
+        print(f"repiprocal median = {mlp_reciprocal[median_index]:.3f}")
+        print(f"relative avg = {sum(mlp_relative) / samples:.3f}")
+        print(f"relative median = {mlp_relative[median_index]:.3f}")
+        print("--- Top Rank ---")
+        print(f"matrix = {(top_both + top_only_matrix) * 100 / samples:.2f} %")
+        print(f"MLP = {(top_both + top_only_mlp) * 100 / samples:.2f} %")
+        print(f"oracle = {(top_both + top_only_matrix + top_only_mlp) * 100 / samples:.2f} %")
+        print(f"both = {top_both}")
+        print(f"only matrix = {top_only_matrix}")
+        print(f"only MLP = {top_only_mlp}")
+        print(f"none = {top_none}")
+
     # ------------------------------------------------------------
     # Logging
     # ------------------------------------------------------------
