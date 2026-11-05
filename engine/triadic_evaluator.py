@@ -6,19 +6,17 @@ from typing import List
 
 from .triadic_llm import TriadicLLM
 
-MAX_TOKENS = 3000
+MAX_TOKENS = 1000
 MAX_CHAPTERS = 1000
 MIN_SENTENCES = 10
 
 EVALUATION_PROMPT = (
 "Give a score between 1 and 100 for the following book chapter. "
 "It is a fiction book written on a moderate level. "
+"A typical chapter scores around 50 and exceptional chapters can score above 80. "
 "A score below 50 is perfectly acceptable. "
-"Assume the average moderate book chapter scores around 50. "
-"Only exceptional chapters should score above 80. "
-"Evaluate using the following criteria: " 
-"content, coherence, readability, originality, creativity, style, structure. "
-"Do not explain the score. Write the result as: Score: <number> and stop after that. "
+"Important are: readability, content, originality, coherence, structure. " 
+"Do not explain the score. Write out the result formatted as: Score: <number>. "
 "The chapter text is: $STORY"
 )
 
@@ -39,12 +37,14 @@ class TriadicEvaluator:
 
     def evaluate_chapter(self, chapter: EvaluatorChapter):
         # score chapter twice and store minumum and maximum
-        score1 = self.score_chapter(chapter)
-        score2 = self.score_chapter(chapter)
-        chapter.min_score: int = min(score1, score2)
-        chapter.max_score: int = max(score1, score2)
-        chapter.score = (score1 + score2 + 1) // 2
-        print(f"score = {chapter.min_score} / {chapter.max_score}")
+        scores = []
+        for _ in range(3):
+            scores.append(self.score_chapter(chapter))
+        scores.sort()            
+        chapter.min_score: int = scores[0]
+        chapter.max_score: int = scores[2]
+        chapter.score: int = scores[1]
+        print(f"scores = {scores}")
         return
     
     def evaluate_book(self, book_filename: str, evaluation_filename: str):

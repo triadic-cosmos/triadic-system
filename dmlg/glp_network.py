@@ -62,10 +62,11 @@ class GlpNetwork:
 
         # Input vector dimensions
         token_input_size = self.configuration.generator_token_input_size()
-
+        token_pred_input_size = token_input_size + self.configuration.token_embedding_dimension
+        
         # MLP network
         self.glp_network = NeuralNetwork(
-            token_input_size,
+            token_pred_input_size,
             self.configuration.first_hidden_size,
             self.configuration.other_hidden_size,
             self.configuration.generator_output_size()
@@ -174,6 +175,36 @@ class GlpNetwork:
             encoded_inputs.append(encoded_input)
             encoded_outputs.append(embedding)
         
+        # Update prediction matrix
+        with torch.no_grad():
+            for index, target in enumerate(sample.target_tokens):
+                # Input vector
+                encoded_input = encoded_inputs[index]
+                input_vec = torch.tensor([encoded_input], dtype=torch.float32)
+                input_vec = F.normalize(input_vec, p=2, dim=1)
+
+                # Output vector
+                embedding = self.lemma_embedding_dict.get_embedding(target).embedding
+                output_vec = torch.tensor([embedding], dtype=torch.float32)
+                output_vec = F.normalize(output_vec, p=2, dim=1)
+                                
+                # Calculate delta
+                delta_matrix = (
+                    learning_rate *
+                    torch.outer(output_vec.squeeze(), input_vec.squeeze())
+                )
+
+                # Update matrix
+                self.predictor_matrix = delta_matrix + self.predictor_matrix * decay
+
+                # Add prediction of matrix to input vector for MLP
+                matrix_input = torch.tensor([encoded_input], dtype=torch.float32).squeeze()
+                matrix_pred = self.predictor_matrix @ matrix_input
+                matrix_pred = F.normalize(matrix_pred, p=2, dim=0)      
+                encoded_inputs[index] = encoded_input + matrix_pred.tolist()
+
+            self.predictor_matrix = self.predictor_matrix.detach()
+        
         # Train MLP network
         mlp_input = torch.tensor([encoded_inputs], dtype=torch.float32)
         mlp_input = F.normalize(mlp_input, p=2, dim=1)
@@ -198,29 +229,6 @@ class GlpNetwork:
                     prediction = F.normalize(prediction, p=2, dim=0)
                     embedding = self.lemma_embedding_dict.get_embedding(target)
                     embedding.update(prediction.tolist(), alpha)
-
-        # Update prediction matrix
-        with torch.no_grad():
-            for index, target in enumerate(sample.target_tokens):
-                # Input vector
-                input_vec = torch.tensor([encoded_inputs[index]], dtype=torch.float32)
-                input_vec = F.normalize(input_vec, p=2, dim=1)
-
-                # Output vector
-                embedding = self.lemma_embedding_dict.get_embedding(target).embedding
-                output_vec = torch.tensor([embedding], dtype=torch.float32)
-                output_vec = F.normalize(output_vec, p=2, dim=1)
-                
-                # Calculate delta
-                delta_matrix = (
-                    learning_rate *
-                    torch.outer(output_vec.squeeze(), input_vec.squeeze())
-                )
-
-                # Update matrix
-                self.predictor_matrix = delta_matrix + self.predictor_matrix * decay
-
-            self.predictor_matrix = self.predictor_matrix.detach()
 
     # ------------------------------------------------------------
     # Evaluate model with a curriculum sentence
@@ -258,10 +266,11 @@ class GlpNetwork:
 
             # Infer proposal
             with torch.no_grad():
-                x = torch.tensor([encoded_input], dtype=torch.float32)
-                matrix_pred = self.predictor_matrix @ x.squeeze()
-                mlp_pred = self.glp_network(x).squeeze(0)
-                matrix_pred = F.normalize(matrix_pred, p=2, dim=0)
+                matrix_input = torch.tensor([encoded_input], dtype=torch.float32).squeeze()
+                matrix_pred = self.predictor_matrix @ matrix_input
+                matrix_pred = F.normalize(matrix_pred, p=2, dim=0)                
+                mlp_input = torch.tensor([encoded_input + matrix_pred.tolist()], dtype=torch.float32)
+                mlp_pred = self.glp_network(mlp_input).squeeze(0)
                 mlp_pred = F.normalize(mlp_pred, p=2, dim=0)
                 agreement = torch.dot(matrix_pred, mlp_pred)
 
@@ -348,8 +357,11 @@ class GlpNetwork:
         
         # Infer proposal 
         with torch.no_grad():
-            x = torch.tensor([self.encoder.encode_token(model_input)], dtype=torch.float32)
-            mlp_pred = self.glp_network(x).squeeze(0)
+            matrix_input = torch.tensor([self.encoder.encode_token(model_input)], dtype=torch.float32)
+            matrix_pred = self.predictor_matrix @ matrix_input.squeeze()
+            matrix_pred = F.normalize(matrix_pred, p=2, dim=0)
+            mlp_input = torch.tensor([self.encoder.encode_token(model_input) + matrix_pred.tolist()], dtype=torch.float32)
+            mlp_pred = self.glp_network(mlp_input).squeeze(0)
             mlp_pred = F.normalize(mlp_pred, p=2, dim=0)
         
         # Create all eligible target token pairs

@@ -5,8 +5,8 @@ import time
 
 MODEL = "planet"
 PREFIX = "base"
-EVALUATE = True
-EPOCHS = 10000
+EVALUATE = False
+EPOCHS = 5000
 MAX_EPOCHS = 30000
 CAS_VECTOR_SIZE = 0
 
@@ -16,7 +16,7 @@ start = time.perf_counter()
 trainer: TriadicTrainer = TriadicTrainer()
 
 if EVALUATE:
-    trainer.evaluate(MODEL, PREFIX)
+    trainer.evaluate(MODEL, PREFIX, True)
 else:
     trainer.train(MODEL, PREFIX, EPOCHS, MAX_EPOCHS, CAS_VECTOR_SIZE)
 
