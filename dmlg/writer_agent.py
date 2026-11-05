@@ -94,7 +94,7 @@ class WriterAgent:
     # Evaluation
     # ------------------------------------------------------------
 
-    def evaluate_curriculum(self, curriculum: Curriculum):
+    def evaluate_curriculum(self, curriculum: Curriculum, verbose: bool = False):
         sentences = 0
         samples = 0
         allowed = 0
@@ -160,7 +160,8 @@ class WriterAgent:
                 else:
                     targets.append(f"[{evaluation.target.lemma.text}]")
             
-            print(f"[{index}] {' '.join(targets)}")
+            if verbose:
+                print(f"[{index}] {' '.join(targets)}")
             
         candidates.sort()
         agreements.sort()
@@ -175,7 +176,7 @@ class WriterAgent:
         p10_index = samples // 10
         p90_index = (9 * samples) // 10
 
-        print("=== Evaluation ===")
+        print(f"=== Evaluation at {self.training_epochs} epochs ===")
         print(f"sentences = {sentences}")
         print(f"samples = {samples}")
         print("--- Candidates ---")

@@ -9,9 +9,9 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 256
-    other_hidden_size: int = 256
-    token_embedding_dimension: int = 64
+    first_hidden_size: int = 128
+    other_hidden_size: int = 128
+    token_embedding_dimension: int = 48
     total_pages: int = 1000000
     max_page_input_size: int = 1
     
@@ -21,15 +21,15 @@ class Configuration:
     position_divider = 30
     paragraph_divider = 50
     
-    narrative_sentences: int = 15
+    narrative_sentences: int = 10
     
     tracker_entities: int = 0
     tracker_alpha: float = 0.98
     
-    history_size = [32, 48, 64]
-    history_alpha = [0.92, 0.95, 0.98]
+    history_size = [48]
+    history_alpha = [0.95]
     
-    last_embeddings: int = 15
+    last_embeddings: int = 10
 
     # ------------------------------------------------------------
     # Curriculum parameters
@@ -42,9 +42,9 @@ class Configuration:
     # ------------------------------------------------------------
     # Training parameters
     # ------------------------------------------------------------
-    learn_alpha: float = 0.001
-    random_epochs: int = 1000
-    show_epochs_step: int = 100
+    learn_alpha: float = 0.0
+    random_epochs: int = 10000
+    show_epochs_step: int = 1000
     matrix_decay: float = 0.99999
     matrix_learning_rate: float = 0.001
     

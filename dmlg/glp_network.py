@@ -349,12 +349,8 @@ class GlpNetwork:
         # Infer proposal 
         with torch.no_grad():
             x = torch.tensor([self.encoder.encode_token(model_input)], dtype=torch.float32)
-            matrix_pred = self.predictor_matrix @ x.squeeze()
-            matrix_pred = F.normalize(matrix_pred, p=2, dim=0)
             mlp_pred = self.glp_network(x).squeeze(0)
             mlp_pred = F.normalize(mlp_pred, p=2, dim=0)
-            combined_pred = 0.2 * matrix_pred + 0.8 * mlp_pred
-            combined_pred = F.normalize(combined_pred, p=2, dim=0)
         
         # Create all eligible target token pairs
         for tok in output_tokens:
@@ -365,7 +361,7 @@ class GlpNetwork:
                     dtype=torch.float32,
                 )                
                 emb = F.normalize(emb, p=2, dim=0)
-                logit = score(emb, combined_pred)
+                logit = score(emb, mlp_pred)
                 page_pairs.append(TokenLogit(token=tok, logit=logit))
 
         # Sort pairs and return

@@ -57,7 +57,7 @@ class TriadicTrainer:
         print("Training agent...")
         builder.train_agent(environment, curriculum, max_epochs)
 
-    def evaluate(self, name: str, prefix: str):
+    def evaluate(self, name: str, prefix: str, verbose: bool = False):
         print("Reading curriculum...")        
         configuration = Configuration(name)
         builder = AgentBuilder(configuration)
@@ -65,4 +65,4 @@ class TriadicTrainer:
         curriculum = builder.build_curriculum(environment, "book")
         
         print("Evaluating agent...")
-        builder.evaluate_agent(environment, curriculum)
+        builder.evaluate_agent(environment, curriculum, verbose)

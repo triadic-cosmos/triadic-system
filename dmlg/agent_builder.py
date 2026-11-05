@@ -160,6 +160,7 @@ class AgentBuilder:
 
         iteration: int = 0
         while iteration < 1 or max_epochs > 0:
+            agent.evaluate_curriculum(combined_curriculum, False)            
             if max_epochs > 0 and agent.training_epochs >= max_epochs:
                 print("Maximum training epochs reached!")
                 break
@@ -170,7 +171,7 @@ class AgentBuilder:
 
         agent.show_predictor()
 
-    def evaluate_agent(self, environment: WriterEnvironment, curriculum: List[Curriculum]):
+    def evaluate_agent(self, environment: WriterEnvironment, curriculum: List[Curriculum], verbose: bool = False):
         print("Evaluating agent from curriculum...")
 
         agent: WriterAgent = self.load_or_create_agent(environment)
@@ -179,4 +180,4 @@ class AgentBuilder:
         combined_curriculum: Curriculum = training_builder.build_curriculum(
             curriculum, self.configuration.get_cas_vector_size())
         
-        agent.evaluate_curriculum(combined_curriculum)
+        agent.evaluate_curriculum(combined_curriculum, verbose)
