@@ -305,9 +305,12 @@ class LearnedTokenEmbedding:
     def update(self, target: List[float], alpha: float):
         if len(target) != self.dimension:
             raise Exception(f"Incompatible dimension! {self.dimension} != {len(target)}")
-        orig_alpha = 1.0 - alpha
         for i in range(0, self.dimension):
-            self.embedding[i] = self.embedding[i] * orig_alpha + target[i] * alpha
+            dif: float = target[i] - self.embedding[i]
+            if dif > 0:
+                self.embedding[i] += alpha * dif * dif
+            else:
+                self.embedding[i] -= alpha * dif * dif
     
     @staticmethod
     def create(token: Token, dimension: int) -> "LearnedTokenEmbedding":

@@ -7,7 +7,7 @@ MODEL = "planet"
 PREFIX = "base"
 EVALUATE = False
 EPOCHS = 5000
-MAX_EPOCHS = 30000
+MAX_EPOCHS = 100000
 CAS_VECTOR_SIZE = 0
 
 # Training a dataset model with epoch variants

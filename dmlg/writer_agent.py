@@ -24,6 +24,41 @@ from .bias import BiasMLP, AMLPBias
 GRAMMAR_CHECK = False
 
 @dataclass
+class TrainingStats:
+    def __init__(self):
+        self.embedding_epochs: int = 0
+        self.embedding_count: int = 0
+        self.matrix_epochs: int = 0
+        self.matrix_count: int = 0
+        self.mlp_epochs: int = 0
+        self.mlp_count: int = 0
+
+    def show(self):
+        print(f"embedding training epochs = {self.embedding_epochs}")
+        print(f"embedding training samples = {self.embedding_count}")        
+        print(f"matrix training epochs = {self.matrix_epochs}")
+        print(f"matrix training samples = {self.matrix_count}")
+        print(f"MLP training epochs = {self.mlp_epochs}")
+        print(f"MLP training samples = {self.mlp_count}")
+
+@dataclass
+class ModelEvaluation:
+    matrix_percent: float
+    mlp_percent: float
+    oracle_percent: float
+    matrix_median_reciprocal_rank: float
+    mlp_median_reciprocal_rank: float
+
+    def is_matrix_improvement(self, previous: "ModelEvalation") -> bool:
+        return self.matrix_percent - previous.matrix_percent >= 0.2 or \
+            self.matrix_median_reciprocal_rank - previous.matrix_median_reciprocal_rank >= 0.01
+
+    def is_mlp_improvement(self, previous: "ModelEvaluation") -> bool:
+        return self.mlp_percent - previous.mlp_percent >= 0.5 or \
+               self.oracle_percent - previous.oracle_percent >= 0.5 or \
+               self.mlp_median_reciprocal_rank - previous.mlp_median_reciprocal_rank >= 0.01
+
+@dataclass
 class WriterAgent:
     environment: WriterEnvironment
     id: str
@@ -32,9 +67,7 @@ class WriterAgent:
     configuration: Configuration = field(init=False)
     glp_network: GlpNetwork = field(init=False)
     tracking: dict = field(init=False)
-
-    training_count: int = 0
-    training_epochs: int = 0
+    training: TrainingStats = field(init=False)
 
     def __init__(self, environment: WriterEnvironment, id: str):
         self.environment = environment
@@ -43,9 +76,10 @@ class WriterAgent:
         self.rng = random.Random()
         self.glp_network = GlpNetwork(self.configuration)
         self.tracking = None
+        self.training = TrainingStats()
 
     def __str__(self):
-        return f"[{self.id}] trainings = {self.training_count}"
+        return f"[{self.id}]"
 
     def new_context(self) -> ContextWindow:
         return ContextWindow(self.configuration,
@@ -75,26 +109,41 @@ class WriterAgent:
         if self.glp_network.glp_network.bias:
             self.glp_network.glp_network.bias.bias_mlp.plot()
 
-    def train_curriculum(self, curriculum: Curriculum, random_epochs: int):
+    def train_embedding(self, curriculum: Curriculum):
+        # Train all sentences once in order
+        for sentence in curriculum.sentences:
+            self.glp_network.learn_sentence_embedding(sentence.sample)
+            self.training.embedding_count += len(sentence.tokens)
+            
+        self.training.embedding_epochs += len(curriculum.sentences)
+
+    def train_matrix(self, curriculum: Curriculum, random_epochs: int):
         # Train sentences using random order
         for epoch in range(1, random_epochs + 1):
             sentence: CurriculumSentence = curriculum.get_random_sentence(self.rng)
-            self.glp_network.learn_sentence(sentence.sample)
-            self.training_count += len(sentence.tokens)                
+            self.glp_network.learn_sentence_matrix(sentence.sample)
+            self.training.matrix_count += len(sentence.tokens)                
             if epoch % self.configuration.show_epochs_step == 0:
                 print(epoch)
 
-        # Show progress
-        if epoch % self.configuration.show_epochs_step != 0:
-            print(epoch)
-        self.training_epochs += random_epochs
-        self.show()
+        self.training.matrix_epochs += random_epochs
 
+    def train_mlp(self, curriculum: Curriculum, random_epochs: int):
+        # Train sentences using random order
+        for epoch in range(1, random_epochs + 1):
+            sentence: CurriculumSentence = curriculum.get_random_sentence(self.rng)
+            self.glp_network.learn_sentence_mlp(sentence.sample)
+            self.training.mlp_count += len(sentence.tokens)                
+            if epoch % self.configuration.show_epochs_step == 0:
+                print(epoch)
+
+        self.training.mlp_epochs += random_epochs
+                        
     # ------------------------------------------------------------
     # Evaluation
     # ------------------------------------------------------------
 
-    def evaluate_curriculum(self, curriculum: Curriculum, verbose: bool = False):
+    def evaluate_curriculum(self, curriculum: Curriculum, verbose: bool = False) -> ModelEvaluation:
         sentences = 0
         samples = 0
         allowed = 0
@@ -176,9 +225,15 @@ class WriterAgent:
         p10_index = samples // 10
         p90_index = (9 * samples) // 10
 
-        print(f"=== Evaluation at {self.training_epochs} epochs ===")
+        matrix_percent = (top_both + top_only_matrix) * 100 / samples
+        mlp_percent = (top_both + top_only_mlp) * 100 / samples
+        oracle_percent = (top_both + top_only_matrix + top_only_mlp) * 100 / samples
+        
+        print(f"\n=== Evaluation ===")
+        self.training.show()
+        print("--- Curriculum ---")
         print(f"sentences = {sentences}")
-        print(f"samples = {samples}")
+        print(f"samples = {samples}")        
         print("--- Candidates ---")
         print(f"avg = {sum(candidates) / samples:.1f}")
         print(f"median = {candidates[median_index]}")
@@ -212,25 +267,31 @@ class WriterAgent:
         print(f"repiprocal median = {mlp_reciprocal[median_index]:.3f}")
         print(f"relative avg = {sum(mlp_relative) / samples:.3f}")
         print(f"relative median = {mlp_relative[median_index]:.3f}")
-        print("--- Top Rank ---")
-        print(f"matrix = {(top_both + top_only_matrix) * 100 / samples:.2f} %")
-        print(f"MLP = {(top_both + top_only_mlp) * 100 / samples:.2f} %")
-        print(f"oracle = {(top_both + top_only_matrix + top_only_mlp) * 100 / samples:.2f} %")
+        print("--- Top Rank % ---")
+        print(f"matrix = {matrix_percent:.2f} %")
+        print(f"MLP = {mlp_percent:.2f} %")
+        print(f"oracle = {oracle_percent:.2f} %")
+        print(f"oracle gap = {oracle_percent - mlp_percent:.2f} %")
+        print("--- Top Rank ---")        
         print(f"both = {top_both}")
         print(f"only matrix = {top_only_matrix}")
         print(f"only MLP = {top_only_mlp}")
         print(f"none = {top_none}")
+
+        return ModelEvaluation(matrix_percent, mlp_percent, oracle_percent,
+                               matrix_reciprocal[median_index],
+                               mlp_reciprocal[median_index])
 
     # ------------------------------------------------------------
     # Logging
     # ------------------------------------------------------------
 
     def show(self, full = False):
-        print(f"training epochs = {self.training_epochs}")
-        print(f"training count = {self.training_count}")
+        print(f"\n=== Statistics ===")
+        self.training.show()        
         print(f"token input size = {self.configuration.generator_token_input_size()}")
         print(f"page count = {len(self.glp_network.page_list)}")
-               
+        
         if full:
             sizes = []
             for page in self.glp_network.page_list:
@@ -262,13 +323,13 @@ class WriterAgent:
             
             print(f"{first.lemma} = {len(similar_tokens)}")
 
-    def show_predictor(self):
+    def show_matrix(self):
         with torch.no_grad():
             m = self.glp_network.predictor_matrix
             row_norms = m.norm(dim=1)
             col_norms = m.norm(dim=0)
 
-            print("=== Predictor Matrix Stats ===")            
+            print("\n=== Predictor Matrix Stats ===")            
             print(f"shape         : {tuple(m.shape)}")
             print(f"mean          : {m.mean().item():.6f}")
             print(f"std           : {m.std().item():.6f}")
@@ -295,8 +356,7 @@ class WriterAgent:
             "id": self.id,
             "config": self.configuration,
             "glp_network": self.glp_network,
-            "training_count": self.training_count,
-            "training_epochs": self.training_epochs,
+            "training": self.training,
             "tracking": self.tracking
         }
         with open(path, "wb") as f:
@@ -310,8 +370,7 @@ class WriterAgent:
         agent = WriterAgent(environment, state["id"])
         agent.configuration = state["config"]
         agent.glp_network = state["glp_network"]
-        agent.training_count = state["training_count"]
-        agent.training_epochs = state["training_epochs"]
+        agent.training = state["training"]
         agent.tracking = state["tracking"]
         
         if hasattr(agent.glp_network, "glp_network"):

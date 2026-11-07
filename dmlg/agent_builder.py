@@ -151,25 +151,48 @@ class AgentBuilder:
         print(f"maximum epochs = {max_epochs}")
 
         agent: WriterAgent = self.load_or_create_agent(environment)
-
         agent.add_tracking(curriculum)
+        agent.save(self.model_filename(environment))
 
         training_builder: TrainingBatchBuilder = TrainingBatchBuilder(agent)
         combined_curriculum: Curriculum = training_builder.build_curriculum(
             curriculum, self.configuration.get_cas_vector_size())
+        current_eval = agent.evaluate_curriculum(combined_curriculum)
 
-        iteration: int = 0
-        while iteration < 1 or max_epochs > 0:
-            agent.evaluate_curriculum(combined_curriculum, False)            
-            if max_epochs > 0 and agent.training_epochs >= max_epochs:
-                print("Maximum training epochs reached!")
-                break
-            iteration += 1
-            print(f"Training for iteration {iteration}")
-            agent.train_curriculum(combined_curriculum, random_epochs)        
+        if self.configuration.learn_alpha > 0:
+            print("\n>>>>> Embedding Training Cycle <<<<<")
+            agent.train_embedding(combined_curriculum)
+            current_eval = agent.evaluate_curriculum(combined_curriculum)
             agent.save(self.model_filename(environment))
 
-        agent.show_predictor()
+        if self.configuration.learn_matrix:
+            print("\n>>>>> Matrix Training Cycle <<<<<")
+            improvement = True
+            while improvement and agent.training.matrix_epochs < max_epochs:
+                agent.train_matrix(combined_curriculum, random_epochs)
+                new_eval = agent.evaluate_curriculum(combined_curriculum)
+                improvement = new_eval.is_matrix_improvement(current_eval)
+                if improvement:
+                    current_eval = new_eval
+                    agent.save(self.model_filename(environment))
+                else:
+                    agent = self.load_or_create_agent(environment)
+
+        if self.configuration.learn_mlp:
+            print("\n>>>>> MLP Training Cycle <<<<<")
+            improvement = True
+            while improvement and agent.training.mlp_epochs < max_epochs:
+                agent.train_mlp(combined_curriculum, random_epochs)
+                new_eval = agent.evaluate_curriculum(combined_curriculum)
+                improvement = new_eval.is_mlp_improvement(current_eval)
+                if improvement:
+                    current_eval = new_eval
+                    agent.save(self.model_filename(environment))
+                else:
+                    agent = self.load_or_create_agent(environment)
+        
+        agent.show()
+        agent.show_matrix()
 
     def evaluate_agent(self, environment: WriterEnvironment, curriculum: List[Curriculum], verbose: bool = False):
         print("Evaluating agent from curriculum...")

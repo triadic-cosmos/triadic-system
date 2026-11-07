@@ -151,35 +151,52 @@ class GlpNetwork:
 
     def create_lemma_embedding_dictionary(self) -> LemmaEmbeddingDictionary:
         return LemmaEmbeddingDictionary(self.configuration.token_embedding_dimension)
-       
+
     # ------------------------------------------------------------
     # Learning
     # ------------------------------------------------------------
-        
-    def learn_sentence(self, sample: TrainingSampleSentence):
+
+    def learn_sentence_embedding(self, sample: TrainingSampleSentence):
+        # Configuration
+        alpha = self.configuration.learn_alpha
+        if alpha <= 0.0:
+            return
+
+        # Initialize model input
+        model_input = sample.model_input.copy()
+        model_input.window.start_sentence()
+
+        # Update embedding for each target token
+        with torch.no_grad():
+            for target in sample.target_tokens:
+                encoded_input = self.encoder.encode_token(model_input)
+                model_input.window.add_target_token(target)
+                input_vec = torch.tensor([encoded_input], dtype=torch.float32)
+                input_vec = F.normalize(input_vec, p=2, dim=1)
+                prediction = self.predictor_matrix @ input_vec.squeeze()
+                prediction = F.normalize(prediction, p=2, dim=0)                
+                input_vec = torch.tensor([encoded_input + prediction.tolist()], dtype=torch.float32)
+                input_vec = F.normalize(input_vec, p=2, dim=1)
+                prediction = self.glp_network(input_vec).squeeze(0)
+                prediction = F.normalize(prediction, p=2, dim=0)                
+                embedding = self.lemma_embedding_dict.get_embedding(target)
+                embedding.update(prediction.tolist(), alpha)
+    
+    def learn_sentence_matrix(self, sample: TrainingSampleSentence):
         # Configuration
         learning_rate = self.configuration.matrix_learning_rate
         decay = self.configuration.matrix_decay
-        alpha = self.configuration.learn_alpha
         
-        # Build inputs and outputs from target tokens
+        # Initialize model input
         model_input = sample.model_input.copy()
         model_input.window.start_sentence()
-        encoded_inputs = []
-        encoded_outputs = []
-        
-        for target in sample.target_tokens:
-            encoded_input = self.encoder.encode_token(model_input)
-            model_input.window.add_target_token(target)
-            embedding = self.lemma_embedding_dict.get_embedding(target).embedding
-            encoded_inputs.append(encoded_input)
-            encoded_outputs.append(embedding)
         
         # Update prediction matrix
         with torch.no_grad():
-            for index, target in enumerate(sample.target_tokens):
+            for target in sample.target_tokens:
                 # Input vector
-                encoded_input = encoded_inputs[index]
+                encoded_input = self.encoder.encode_token(model_input)
+                model_input.window.add_target_token(target)                
                 input_vec = torch.tensor([encoded_input], dtype=torch.float32)
                 input_vec = F.normalize(input_vec, p=2, dim=1)
 
@@ -197,13 +214,30 @@ class GlpNetwork:
                 # Update matrix
                 self.predictor_matrix = delta_matrix + self.predictor_matrix * decay
 
-                # Add prediction of matrix to input vector for MLP
-                matrix_input = torch.tensor([encoded_input], dtype=torch.float32).squeeze()
-                matrix_pred = self.predictor_matrix @ matrix_input
-                matrix_pred = F.normalize(matrix_pred, p=2, dim=0)      
-                encoded_inputs[index] = encoded_input + matrix_pred.tolist()
-
             self.predictor_matrix = self.predictor_matrix.detach()
+
+    def learn_sentence_mlp(self, sample: TrainingSampleSentence):
+        # Initialize model input
+        model_input = sample.model_input.copy()
+        model_input.window.start_sentence()
+
+        # Build inputs and outputs from target tokens
+        encoded_inputs = []
+        encoded_outputs = []
+
+        for target in sample.target_tokens:
+            encoded_input = self.encoder.encode_token(model_input)
+            model_input.window.add_target_token(target)
+            
+            # Add prediction of matrix to input vector for MLP
+            matrix_input = torch.tensor([encoded_input], dtype=torch.float32).squeeze()
+            matrix_pred = self.predictor_matrix @ matrix_input
+            matrix_pred = F.normalize(matrix_pred, p=2, dim=0)      
+            encoded_input += matrix_pred.tolist()
+            encoded_inputs.append(encoded_input)
+
+            embedding = self.lemma_embedding_dict.get_embedding(target).embedding
+            encoded_outputs.append(embedding)
         
         # Train MLP network
         mlp_input = torch.tensor([encoded_inputs], dtype=torch.float32)
@@ -218,17 +252,6 @@ class GlpNetwork:
         self.glp_network.opt.zero_grad()
         loss.backward()
         self.glp_network.opt.step()
-
-        # Update token embeddings
-        if alpha > 0.0:
-            with torch.no_grad():        
-                for index, target in enumerate(sample.target_tokens):
-                    input_vec = torch.tensor([encoded_inputs[index]], dtype=torch.float32)
-                    input_vec = F.normalize(input_vec, p=2, dim=1)        
-                    prediction = self.glp_network(input_vec).squeeze(0)
-                    prediction = F.normalize(prediction, p=2, dim=0)
-                    embedding = self.lemma_embedding_dict.get_embedding(target)
-                    embedding.update(prediction.tolist(), alpha)
 
     # ------------------------------------------------------------
     # Evaluate model with a curriculum sentence

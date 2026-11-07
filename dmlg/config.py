@@ -42,7 +42,9 @@ class Configuration:
     # ------------------------------------------------------------
     # Training parameters
     # ------------------------------------------------------------
-    learn_alpha: float = 0.0
+    learn_matrix: bool = True
+    learn_mlp: bool = True
+    learn_alpha: float = 0.001
     random_epochs: int = 10000
     show_epochs_step: int = 1000
     matrix_decay: float = 0.99999
@@ -66,12 +68,6 @@ class Configuration:
         if hasattr(self, "cas_vector_size"):
             return self.cas_vector_size
         return 0
-
-    def generator_sentence_input_size(self) -> int:
-        # line position (1) + paragraph position (1) = 2
-        return self.narrative_sentences * self.lemma_output_dimension + \
-               self.tracker_entities + \
-               self.get_cas_vector_size() + 2
 
     def generator_token_input_size(self) -> int:
         # line position (1) + paragraph position (1) = 2
