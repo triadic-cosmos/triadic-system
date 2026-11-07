@@ -13,19 +13,6 @@ from dmlg import (
 
 @dataclass
 class TriadicTrainer:
-    def set_blending(self, name: str, old_prefix: str, new_prefix: str, alpha: float):
-        configuration = Configuration(name)
-        configuration.learn_alpha = alpha
-        builder = AgentBuilder(configuration)
-
-        old_environment = builder.build_environment(configuration, old_prefix)
-        agent: WriterAgent = builder.load_or_create_agent(old_environment)
-        agent.configuration.learn_alpha = alpha
-        agent.environment.configuration.learn_alpha = alpha
-        
-        new_environment = builder.build_environment(configuration, new_prefix)
-        agent.save(builder.model_filename(new_environment))
-
     def scale(self, name: str, old_prefix: str, new_prefix: str, new_hidden_size: int):
         configuration = Configuration(name)
         builder = AgentBuilder(configuration)
