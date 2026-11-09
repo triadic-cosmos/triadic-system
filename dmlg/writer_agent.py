@@ -18,7 +18,6 @@ from .context import ContextWindow, ModelInput
 from .glp_network import GlpNetwork, Evaluation
 from .training import TrainingSampleSentence
 from .curriculum import Curriculum, CurriculumSentence
-from .entity_tracker import TrackerMap
 from .bias import BiasMLP, AMLPBias
 
 GRAMMAR_CHECK = False
@@ -26,16 +25,12 @@ GRAMMAR_CHECK = False
 @dataclass
 class TrainingStats:
     def __init__(self):
-        self.embedding_epochs: int = 0
-        self.embedding_count: int = 0
         self.matrix_epochs: int = 0
         self.matrix_count: int = 0
         self.mlp_epochs: int = 0
         self.mlp_count: int = 0
 
     def show(self):
-        print(f"embedding training epochs = {self.embedding_epochs}")
-        print(f"embedding training samples = {self.embedding_count}")        
         print(f"matrix training epochs = {self.matrix_epochs}")
         print(f"matrix training samples = {self.matrix_count}")
         print(f"MLP training epochs = {self.mlp_epochs}")
@@ -43,20 +38,38 @@ class TrainingStats:
 
 @dataclass
 class ModelEvaluation:
+    matrix_epochs: int
+    mlp_epochs: int
     matrix_percent: float
     mlp_percent: float
     oracle_percent: float
-    matrix_median_reciprocal_rank: float
-    mlp_median_reciprocal_rank: float
+    matrix_avg_reciprocal_rank: float
+    mlp_avg_reciprocal_rank: float
 
     def is_matrix_improvement(self, previous: "ModelEvalation") -> bool:
-        return self.matrix_percent - previous.matrix_percent >= 0.2 or \
-            self.matrix_median_reciprocal_rank - previous.matrix_median_reciprocal_rank >= 0.01
+        if not previous:
+            return True
+        return self.matrix_percent - previous.matrix_percent >= 0.1 or \
+            self.matrix_avg_reciprocal_rank - previous.matrix_avg_reciprocal_rank >= 0.01
 
     def is_mlp_improvement(self, previous: "ModelEvaluation") -> bool:
-        return self.mlp_percent - previous.mlp_percent >= 0.5 or \
-               self.oracle_percent - previous.oracle_percent >= 0.5 or \
-               self.mlp_median_reciprocal_rank - previous.mlp_median_reciprocal_rank >= 0.01
+        if not previous:
+            return True
+        return self.mlp_percent - previous.mlp_percent >= 0.1 or \
+               self.mlp_avg_reciprocal_rank - previous.mlp_avg_reciprocal_rank >= 0.01
+
+    def show(self):
+        print(f"\n=== Evaluation ===")
+        print(f"matrix epochs = {self.matrix_epochs}")
+        print(f"MLP epochs = {self.mlp_epochs}")
+        print("--- Average Reciprocal Rank ---")
+        print(f"matrix = {self.matrix_avg_reciprocal_rank:.3f}")
+        print(f"MLP = {self.mlp_avg_reciprocal_rank:.3f}")
+        print("--- Top Rank % ---")
+        print(f"matrix = {self.matrix_percent:.2f} %")
+        print(f"MLP = {self.mlp_percent:.2f} %")
+        print(f"oracle = {self.oracle_percent:.2f} %")
+        print(f"oracle gap = {self.oracle_percent - self.mlp_percent:.2f} %")
 
 @dataclass
 class WriterAgent:
@@ -89,16 +102,6 @@ class WriterAgent:
     # ------------------------------------------------------------
     # Learning and curriculum training
     # ------------------------------------------------------------
-
-    def add_tracking(self, curriculums: List[Curriculum]):
-        if hasattr(self, "tracking") and self.tracking:
-            print("Found existing tracking!")
-            return
-        tracking_map = TrackerMap(self.configuration)
-        for curriculum in curriculums:
-            tracking_map.add_entities(curriculum)
-        tracking_map.partition_entities()
-        self.tracking = tracking_map.partitions
         
     def add_bias(self, hidden_size, epochs: int):
         bias: BiasMLP = BiasMLP(self.configuration.other_hidden_size, hidden_size)
@@ -108,15 +111,7 @@ class WriterAgent:
     def plot_bias(self):
         if self.glp_network.glp_network.bias:
             self.glp_network.glp_network.bias.bias_mlp.plot()
-
-    def train_embedding(self, curriculum: Curriculum):
-        # Train all sentences once in order
-        for sentence in curriculum.sentences:
-            self.glp_network.learn_sentence_embedding(sentence.sample)
-            self.training.embedding_count += len(sentence.tokens)
             
-        self.training.embedding_epochs += len(curriculum.sentences)
-
     def train_matrix(self, curriculum: Curriculum, random_epochs: int):
         # Train sentences using random order
         for epoch in range(1, random_epochs + 1):
@@ -168,7 +163,6 @@ class WriterAgent:
         for index, sentence in enumerate(curriculum.sentences):
             sentences += 1
             evaluations: List[Evaluation] = self.glp_network.evaluate(sentence.sample)
-            targets: List[str] = []
             
             for pos, evaluation in enumerate(evaluations):
                 samples += 1
@@ -184,8 +178,8 @@ class WriterAgent:
                 if evaluation.lemma_blocked:
                     lemma_blocked += 1
                     
-                top_matrix = evaluation.rank_matrix == 1
-                top_mlp = evaluation.rank_mlp == 1
+                top_matrix = evaluation.rank_matrix <= 1
+                top_mlp = evaluation.rank_mlp <= 1
                 if top_matrix and top_mlp:
                     top_both += 1
                 elif top_matrix:
@@ -203,14 +197,10 @@ class WriterAgent:
                 mlp_reciprocal.append(1 / evaluation.rank_mlp)
                 matrix_relative.append(evaluation.rank_matrix / evaluation.candidates)
                 mlp_relative.append(evaluation.rank_mlp / evaluation.candidates)
-                
-                if evaluation.allowed:
-                    targets.append(evaluation.target.lemma.text)
-                else:
-                    targets.append(f"[{evaluation.target.lemma.text}]")
-            
-            if verbose:
-                print(f"[{index}] {' '.join(targets)}")
+                            
+        if samples <= 0:
+            print("No samples to evaluate!")
+            return
             
         candidates.sort()
         agreements.sort()
@@ -225,62 +215,71 @@ class WriterAgent:
         p10_index = samples // 10
         p90_index = (9 * samples) // 10
 
+        matrix_avg_reciprocal = sum(matrix_reciprocal) / samples
+        mlp_avg_reciprocal = sum(mlp_reciprocal) / samples
+
         matrix_percent = (top_both + top_only_matrix) * 100 / samples
         mlp_percent = (top_both + top_only_mlp) * 100 / samples
         oracle_percent = (top_both + top_only_matrix + top_only_mlp) * 100 / samples
-        
-        print(f"\n=== Evaluation ===")
-        self.training.show()
-        print("--- Curriculum ---")
-        print(f"sentences = {sentences}")
-        print(f"samples = {samples}")        
-        print("--- Candidates ---")
-        print(f"avg = {sum(candidates) / samples:.1f}")
-        print(f"median = {candidates[median_index]}")
-        print(f"max = {max(candidates)}")
-        print("--- Rule Based ---")
-        print(f"allowed = {allowed}")
-        print(f"both blocked = {both_blocked}")
-        print(f"grammar blocked = {grammar_blocked}")
-        print(f"lemma blocked = {lemma_blocked}")
-        print("--- Total Distance ---")
-        print(f"matrix = {total_matrix:.5f}")
-        print(f"MLP = {total_mlp:.5f}")
-        print("--- Agreement ---")
-        print(f"min = {min(agreements):.5f}")
-        print(f"max = {max(agreements):.5f}")        
-        print(f"avg = {sum(agreements) / samples:.5f}")
-        print(f"median = {agreements[median_index]:.5f}")
-        print(f"p10 = {agreements[p10_index]:.5f}")
-        print(f"p90 = {agreements[p90_index]:.5f}")
-        print("--- Rank Matrix ---")
-        print(f"avg = {sum(matrix_ranks) / samples:.1f}")
-        print(f"median = {matrix_ranks[median_index]}")
-        print(f"repiprocal avg = {sum(matrix_reciprocal) / samples:.3f}")
-        print(f"reciprocal median = {matrix_reciprocal[median_index]:.3f}")
-        print(f"relative avg = {sum(matrix_relative) / samples:.3f}")
-        print(f"relative median = {matrix_relative[median_index]:.3f}")
-        print("--- Rank MLP ---")
-        print(f"avg = {sum(mlp_ranks) / samples:.1f}")
-        print(f"median = {mlp_ranks[median_index]}")
-        print(f"repiprocal avg = {sum(mlp_reciprocal) / samples:.3f}")
-        print(f"repiprocal median = {mlp_reciprocal[median_index]:.3f}")
-        print(f"relative avg = {sum(mlp_relative) / samples:.3f}")
-        print(f"relative median = {mlp_relative[median_index]:.3f}")
-        print("--- Top Rank % ---")
-        print(f"matrix = {matrix_percent:.2f} %")
-        print(f"MLP = {mlp_percent:.2f} %")
-        print(f"oracle = {oracle_percent:.2f} %")
-        print(f"oracle gap = {oracle_percent - mlp_percent:.2f} %")
-        print("--- Top Rank ---")        
-        print(f"both = {top_both}")
-        print(f"only matrix = {top_only_matrix}")
-        print(f"only MLP = {top_only_mlp}")
-        print(f"none = {top_none}")
 
-        return ModelEvaluation(matrix_percent, mlp_percent, oracle_percent,
-                               matrix_reciprocal[median_index],
-                               mlp_reciprocal[median_index])
+        evaluation = ModelEvaluation(
+            self.training.matrix_epochs, self.training.mlp_epochs,
+            matrix_percent, mlp_percent, oracle_percent,
+            matrix_avg_reciprocal, mlp_avg_reciprocal)
+
+        if verbose:
+            print(f"\n=== Evaluation ===")
+            self.training.show()
+            print("--- Curriculum ---")
+            print(f"sentences = {sentences}")
+            print(f"samples = {samples}")        
+            print("--- Candidates ---")
+            print(f"avg = {sum(candidates) / samples:.1f}")
+            print(f"median = {candidates[median_index]}")
+            print(f"max = {max(candidates)}")
+            print("--- Rule Based ---")
+            print(f"allowed = {allowed}")
+            print(f"both blocked = {both_blocked}")
+            print(f"grammar blocked = {grammar_blocked}")
+            print(f"lemma blocked = {lemma_blocked}")
+            print("--- Total Distance ---")
+            print(f"matrix = {total_matrix:.5f}")
+            print(f"MLP = {total_mlp:.5f}")
+            print("--- Agreement ---")
+            print(f"min = {min(agreements):.5f}")
+            print(f"max = {max(agreements):.5f}")        
+            print(f"avg = {sum(agreements) / samples:.5f}")
+            print(f"median = {agreements[median_index]:.5f}")
+            print(f"p10 = {agreements[p10_index]:.5f}")
+            print(f"p90 = {agreements[p90_index]:.5f}")
+            print("--- Rank Matrix ---")
+            print(f"avg = {sum(matrix_ranks) / samples:.1f}")
+            print(f"median = {matrix_ranks[median_index]}")
+            print(f"reciprocal avg = {matrix_avg_reciprocal:.3f}")
+            print(f"reciprocal median = {matrix_reciprocal[median_index]:.3f}")
+            print(f"relative avg = {sum(matrix_relative) / samples:.3f}")
+            print(f"relative median = {matrix_relative[median_index]:.3f}")
+            print("--- Rank MLP ---")
+            print(f"avg = {sum(mlp_ranks) / samples:.1f}")
+            print(f"median = {mlp_ranks[median_index]}")
+            print(f"reciprocal avg = {mlp_avg_reciprocal:.3f}")
+            print(f"reciprocal median = {mlp_reciprocal[median_index]:.3f}")
+            print(f"relative avg = {sum(mlp_relative) / samples:.3f}")
+            print(f"relative median = {mlp_relative[median_index]:.3f}")
+            print("--- Top Rank % ---")
+            print(f"matrix = {matrix_percent:.2f} %")
+            print(f"MLP = {mlp_percent:.2f} %")
+            print(f"oracle = {oracle_percent:.2f} %")
+            print(f"oracle gap = {oracle_percent - mlp_percent:.2f} %")
+            print("--- Top Rank ---")        
+            print(f"both = {top_both}")
+            print(f"only matrix = {top_only_matrix}")
+            print(f"only MLP = {top_only_mlp}")
+            print(f"none = {top_none}")
+        else:
+            evaluation.show()
+            
+        return evaluation
 
     # ------------------------------------------------------------
     # Logging
@@ -392,7 +391,7 @@ class WriterAgent:
 
         # filtered output with blacklisted lemma list
         if params.lemma_blacklist:
-            outputs = [o for o in outputs if o.lemma.text not in params.lemma_blacklist]
+            outputs = [o for o in outputs if o.token.lemma.text not in params.lemma_blacklist]
             if len(outputs) == 0:
                 return None
 
@@ -478,7 +477,6 @@ class WriterAgent:
     
     def update_context(self, ctx: ContextWindow, sentence: WriterSentence):
         ctx.start_sentence()
-        ctx.update_entity_tracking(sentence.tokens)
         
         sentence_vector = self.glp_network.lemma_embedding_dict.get_sentence_embedding(sentence.target_tokens)
         ctx.update_sentence_memory(sentence_vector)

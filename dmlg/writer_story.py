@@ -70,7 +70,7 @@ class WriterParams:
     cas_vector: List[float] = None # cas vector
     max_tokens: int = 70 # maximum grammar + lemma tokens per sentence
     max_attempts: int = 20000 # number of retry attempts to generate sentence
-    top_k: int = 12 # amount of eligible tokens with highest score for sampling
+    top_k: int = 50 # amount of eligible tokens with highest score for sampling
     temperature: float = 0.001 # small scoring bias to equalize token scoring
     top_boost = [1.3, 1.2, 1.1] # score boost for top tokens
     enable_paging = True # use graph or pure MLP mode

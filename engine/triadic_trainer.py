@@ -31,10 +31,9 @@ class TriadicTrainer:
         agent.save(builder.model_filename(new_environment))
         agent.show()
 
-    def train(self, name: str, prefix: str, random_epochs: int, max_epochs: int = 0, cas_vector_size: int = 0):
+    def train(self, name: str, prefix: str, cas_vector_size: int = 0):
         print("Reading curriculum...")
         configuration = Configuration(name)
-        configuration.random_epochs = random_epochs
         configuration.cas_vector_size = cas_vector_size
         
         builder = AgentBuilder(configuration)
@@ -42,7 +41,7 @@ class TriadicTrainer:
         curriculum = builder.build_curriculum(environment, "book")
         
         print("Training agent...")
-        builder.train_agent(environment, curriculum, max_epochs)
+        builder.train_agent(environment, curriculum)
 
     def evaluate(self, name: str, prefix: str, verbose: bool = False):
         print("Reading curriculum...")        

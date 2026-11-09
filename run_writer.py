@@ -4,11 +4,11 @@ from dmlg import WriterParams
 
 import time
 
-MODEL = "planet"
+MODEL = "hyde"
 PREFIX = "base"
 NUM_LINES = 1000
 MAX_CHAPTERS = 100
-LEMMA_BLACKLIST = {}
+LEMMA_BLACKLIST = {"mr", "dr"}
 PROMPT = []
 CAS_VECTOR = [1] * 0
 

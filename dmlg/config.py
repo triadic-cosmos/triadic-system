@@ -9,9 +9,9 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 128
-    other_hidden_size: int = 128
-    token_embedding_dimension: int = 48
+    first_hidden_size: int = 64
+    other_hidden_size: int = 64
+    token_embedding_dimension: int = 256
     total_pages: int = 1000000
     max_page_input_size: int = 1
     
@@ -20,15 +20,7 @@ class Configuration:
     # ------------------------------------------------------------
     position_divider = 30
     paragraph_divider = 50
-    
     narrative_sentences: int = 10
-    
-    tracker_entities: int = 0
-    tracker_alpha: float = 0.98
-    
-    history_size = [48]
-    history_alpha = [0.95]
-    
     last_embeddings: int = 10
 
     # ------------------------------------------------------------
@@ -37,19 +29,21 @@ class Configuration:
     no_roundtrip: bool = True
     max_sentences: int = 100000
     min_sentence_length: int = 10
-    entity_min_count: int = 3
 
     # ------------------------------------------------------------
     # Training parameters
     # ------------------------------------------------------------
-    learn_matrix: bool = True
-    learn_mlp: bool = True
-    learn_alpha: float = 0.001
-    random_epochs: int = 10000
+    matrix_multiplier = 10
+    mlp_multiplier = 25
     show_epochs_step: int = 1000
     matrix_decay: float = 0.99999
     matrix_learning_rate: float = 0.001
-    
+
+    # ------------------------------------------------------------
+    # Evaluation parameters
+    # ------------------------------------------------------------
+    evaluation_max_candidates: int = 100
+
     # ------------------------------------------------------------
     # Derived sizes
     # ------------------------------------------------------------
@@ -73,8 +67,6 @@ class Configuration:
         # line position (1) + paragraph position (1) = 2
         return self.generator_current_context_size() + \
                self.narrative_sentences * self.token_embedding_dimension + \
-               self.tracker_entities + \
-               sum(self.history_size) + \
                self.get_cas_vector_size() + 2
 
     def generator_output_size(self) -> int:

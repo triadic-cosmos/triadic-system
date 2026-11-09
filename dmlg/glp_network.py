@@ -155,32 +155,6 @@ class GlpNetwork:
     # ------------------------------------------------------------
     # Learning
     # ------------------------------------------------------------
-
-    def learn_sentence_embedding(self, sample: TrainingSampleSentence):
-        # Configuration
-        alpha = self.configuration.learn_alpha
-        if alpha <= 0.0:
-            return
-
-        # Initialize model input
-        model_input = sample.model_input.copy()
-        model_input.window.start_sentence()
-
-        # Update embedding for each target token
-        with torch.no_grad():
-            for target in sample.target_tokens:
-                encoded_input = self.encoder.encode_token(model_input)
-                model_input.window.add_target_token(target)
-                input_vec = torch.tensor([encoded_input], dtype=torch.float32)
-                input_vec = F.normalize(input_vec, p=2, dim=1)
-                prediction = self.predictor_matrix @ input_vec.squeeze()
-                prediction = F.normalize(prediction, p=2, dim=0)                
-                input_vec = torch.tensor([encoded_input + prediction.tolist()], dtype=torch.float32)
-                input_vec = F.normalize(input_vec, p=2, dim=1)
-                prediction = self.glp_network(input_vec).squeeze(0)
-                prediction = F.normalize(prediction, p=2, dim=0)                
-                embedding = self.lemma_embedding_dict.get_embedding(target)
-                embedding.update(prediction.tolist(), alpha)
     
     def learn_sentence_matrix(self, sample: TrainingSampleSentence):
         # Configuration
@@ -258,35 +232,36 @@ class GlpNetwork:
     # ------------------------------------------------------------
 
     def evaluate(self, sample: TrainingSampleSentence) -> List[Evaluation]:
-        evaluations = []        
+        evaluations = []
         model_input = sample.model_input.copy()
         model_input.window.start_sentence()
 
         for target in sample.target_tokens:
-            # Select page
-            page: TokenPage = self.pages.get(model_input.window.last_token().text, self.page_list[0])
+            # Encode input and advance context
+            page: TokenPage = self.pages.get(model_input.window.last_token().text, self.page_list[0])            
+            encoded_input = self.encoder.encode_token(model_input)
+            incompatible_grammar = RULE_BASED.determine_incompatible_grammar(model_input, 1)
+            incompatible_lemma = RULE_BASED.determine_incompatible_lemma(model_input)                        
+            model_input.window.add_target_token(target)
+
+            # Skip a fully deterministic choice
             if len(page.output_tokens) <= 1:
-                # Skip a fully deterministic choice
-                continue
+                continue            
  
             # Do rule-based filtering
             filtered_candidates = []
-            incompatible_grammar = RULE_BASED.determine_incompatible_grammar(model_input, 1)
-            incompatible_lemma = RULE_BASED.determine_incompatible_lemma(model_input)                        
             # Prevent filtering of target
             for tok in page.output_tokens:
                 if tok == target or \
                    (tok.grammar.text not in incompatible_grammar and \
                     tok.lemma.lower_text not in incompatible_lemma):
                     filtered_candidates.append(tok)
-            if len(filtered_candidates) <= 1:
-                # Skip a fully deterministic choice after filtering
+                    
+            # Skip very small and very large candidates sets        
+            num_candidates = len(filtered_candidates)
+            if num_candidates <= 2 or num_candidates > self.configuration.evaluation_max_candidates:
                 continue
             
-            # Encode input            
-            encoded_input = self.encoder.encode_token(model_input)
-            model_input.window.add_target_token(target)
-
             # Infer proposal
             with torch.no_grad():
                 matrix_input = torch.tensor([encoded_input], dtype=torch.float32).squeeze()

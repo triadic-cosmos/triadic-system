@@ -28,7 +28,6 @@ class TrainingBatchBuilder:
 
     def update_context(self, sentence: CurriculumSentence, context: ContextWindow):
         context.start_sentence()
-        context.update_entity_tracking(sentence.tokens)
 
     def build_sentence(self, index: int, sentence: CurriculumSentence, line_position: List[float], context: ContextWindow):
         # Create model input
@@ -146,50 +145,29 @@ class AgentBuilder:
     def train_agent(self, environment: WriterEnvironment, curriculum: List[Curriculum], max_epochs: int = 0):
         print("Training agent from curriculum...")
         
-        random_epochs = environment.configuration.random_epochs
-        print(f"random epochs per iteration = {random_epochs}")
-        print(f"maximum epochs = {max_epochs}")
-
         agent: WriterAgent = self.load_or_create_agent(environment)
-        agent.add_tracking(curriculum)
-        agent.save(self.model_filename(environment))
-
+        
         training_builder: TrainingBatchBuilder = TrainingBatchBuilder(agent)
         combined_curriculum: Curriculum = training_builder.build_curriculum(
             curriculum, self.configuration.get_cas_vector_size())
-        current_eval = agent.evaluate_curriculum(combined_curriculum)
 
-        if self.configuration.learn_alpha > 0:
-            print("\n>>>>> Embedding Training Cycle <<<<<")
-            agent.train_embedding(combined_curriculum)
-            current_eval = agent.evaluate_curriculum(combined_curriculum)
+        sentences = len(combined_curriculum.sentences)
+        matrix_epochs = environment.configuration.matrix_multiplier * sentences
+        mlp_epochs = environment.configuration.mlp_multiplier * sentences
+        print(f"matrix epochs = {matrix_epochs}")
+        print(f"MLP epochs = {mlp_epochs}")
+
+        if agent.training.matrix_epochs < matrix_epochs:
+            print("\n>>>>> Matrix Training <<<<<")
+            agent.train_matrix(combined_curriculum, matrix_epochs)
             agent.save(self.model_filename(environment))
-
-        if self.configuration.learn_matrix:
-            print("\n>>>>> Matrix Training Cycle <<<<<")
-            improvement = True
-            while improvement and agent.training.matrix_epochs < max_epochs:
-                agent.train_matrix(combined_curriculum, random_epochs)
-                new_eval = agent.evaluate_curriculum(combined_curriculum)
-                improvement = new_eval.is_matrix_improvement(current_eval)
-                if improvement:
-                    current_eval = new_eval
-                    agent.save(self.model_filename(environment))
-                else:
-                    agent = self.load_or_create_agent(environment)
-
-        if self.configuration.learn_mlp:
-            print("\n>>>>> MLP Training Cycle <<<<<")
-            improvement = True
-            while improvement and agent.training.mlp_epochs < max_epochs:
-                agent.train_mlp(combined_curriculum, random_epochs)
-                new_eval = agent.evaluate_curriculum(combined_curriculum)
-                improvement = new_eval.is_mlp_improvement(current_eval)
-                if improvement:
-                    current_eval = new_eval
-                    agent.save(self.model_filename(environment))
-                else:
-                    agent = self.load_or_create_agent(environment)
+            agent.evaluate_curriculum(combined_curriculum)
+            
+        if agent.training.mlp_epochs < mlp_epochs:
+            print("\n>>>>> MLP Training <<<<<")
+            agent.train_mlp(combined_curriculum, mlp_epochs)        
+            agent.save(self.model_filename(environment))
+            agent.evaluate_curriculum(combined_curriculum, True)
         
         agent.show()
         agent.show_matrix()

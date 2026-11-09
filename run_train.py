@@ -3,11 +3,9 @@ from engine.triadic_trainer import TriadicTrainer
 
 import time
 
-MODEL = "planet"
+MODEL = "hyde"
 PREFIX = "base"
-EVALUATE = False
-EPOCHS = 5000
-MAX_EPOCHS = 100000
+TRAIN = True
 CAS_VECTOR_SIZE = 0
 
 # Training a dataset model with epoch variants
@@ -15,9 +13,9 @@ start = time.perf_counter()
 
 trainer: TriadicTrainer = TriadicTrainer()
 
-if EVALUATE:
-    trainer.evaluate(MODEL, PREFIX, True)
+if TRAIN:
+    trainer.train(MODEL, PREFIX, CAS_VECTOR_SIZE)
 else:
-    trainer.train(MODEL, PREFIX, EPOCHS, MAX_EPOCHS, CAS_VECTOR_SIZE)
+    trainer.evaluate(MODEL, PREFIX, True)
 
 print(f"Training time : {time.perf_counter() - start:.1f} s")
