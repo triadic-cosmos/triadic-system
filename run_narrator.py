@@ -11,28 +11,32 @@ from engine.triadic_llm import TriadicLLM
 from dmlg import WriterParams, DATA_FOLDER
 
 # Parameters
-MODEL = "alice"
+MODEL = "mini"
 MODEL_PREFIX = "base"
 DATASET_FOLDER = DATA_FOLDER + MODEL
 PREFIXES = ["run1"]
-MAX_CHAPTERS = 5
+MAX_CHAPTERS = 100
 MAX_RETRIES = 10
-NUM_LINES = 2000
+NUM_LINES = 1000
 DRAFT = False
-PROMPT = False
+PROMPT = True
 ITERATIVE = True
-USE_MATRIX = True
-LEMMA_BLACKLIST = {"mr", "dr"}
+LEMMA_BLACKLIST = {}
 CAS_VECTORS = [ None ]
 
 WORLD_PROMPT = (
-"The main characters are Dr Albert Einstein and Alice. "
-"They are scientists who investigate cosmic anomalies. "
-"Earth is the primary setting. "
-"Any discovered alien world should be called Zazzle. "
-"Strong triadic influences should appear naturally throughout the story. "
-"A recurring theme is triadic structures and mysterious celestial phenomena. "
-"The genre is poetic cosmic science fiction with a subtle horror atmosphere."
+"The main characters are Dr Minsky as chief scientist and Alice as CEO. "
+"The company or organization is called Mega Corp. "
+"The story revolves around a rapidly growing organization facing a critical transition that may determine its future. "
+"The organization's success is built on foundations that may be less stable than they appear. "
+"Internal and external groups increasingly question the concentration of influence and decision-making power within the organization. "
+"Public trust, transparency, and long-term sustainability are recurring themes. "
+"The characters must identify risks, solve emerging problems, and secure the future of the organization. "
+"Conflict should emerge from uncertainty, competing interests, and difficult strategic decisions. "
+"Add triadic influences using the information, energy, and geometry triad where applicable. "
+"Information represents knowledge, transparency, and understanding. "
+"Energy represents motivation, ambition, conflict, and change. "
+"Geometry represents structure, organization, balance, and concentration of power. "
 )
 
 # Main
@@ -62,8 +66,7 @@ for index in range(len(PREFIXES)):
         lines = NUM_LINES,
         max_chapters = MAX_CHAPTERS,
         lemma_blacklist = LEMMA_BLACKLIST,
-        cas_vector = cas_vector,
-        use_matrix = USE_MATRIX
+        cas_vector = cas_vector
     )
 
     # Create the desired narrotor

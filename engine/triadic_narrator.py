@@ -86,7 +86,7 @@ class TriadicNarratorParams:
     min_transition_sentences: int = 2
     max_transition_sentences: int = 15
     min_score: int = 85
-    min_draft_score: int = 65
+    min_draft_score: int = 60
     min_transition_score: int = 90
     evaluations: int = 2
     max_retries: int = 10
