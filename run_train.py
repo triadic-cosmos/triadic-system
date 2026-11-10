@@ -3,7 +3,7 @@ from engine.triadic_trainer import TriadicTrainer
 
 import time
 
-MODEL = "hyde"
+MODEL = "mini"
 PREFIX = "base"
 TRAIN = True
 CAS_VECTOR_SIZE = 0

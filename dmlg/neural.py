@@ -22,17 +22,6 @@ class NeuralNetwork(nn.Module):
 
         self.opt = torch.optim.Adam(self.parameters(), lr=1e-3)
         
-        self.initialize_bias()
-
-    # Check for bias
-    def initialize_bias(self):
-        if hasattr(self, "bias"):
-            if self.bias:
-                print("Bias present!")
-        else:
-            self.bias = None
-            print("No bias present.")
-        
     # r-skip + r-gate hybrid forward
     def forward(self, x):
         # initial projection
@@ -44,11 +33,7 @@ class NeuralNetwork(nn.Module):
             # gate ∈ (0,1)
             g = torch.sigmoid(self.fc_gate(h))
             # recursive update
-            if self.bias:
-                b = self.bias(h)
-                u = F.silu(self.fc3(h) + b)
-            else:
-                u = F.silu(self.fc3(h))
+            u = F.silu(self.fc3(h))
             # gated residual: h ← h + g·(u−h)
             h = h + g * (u - h)
 

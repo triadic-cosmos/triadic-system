@@ -1,7 +1,7 @@
 """
 DMLG - Dynamic Modular Language Graph
 GLPG - Grammar Lemma Paged Graph
-VGPC - Vector-Graph-PRE-CAS
+VGPC - Vector Graph PRE CAS
 Part of the Triadic System (Triadic Cosmos ecosystem)
 
 This package exposes the public API of the DMLG and GLPG engine.
@@ -66,10 +66,6 @@ from .training import (
     TrainingSampleSentence
 )
 
-# --- Bias Network -----------------------------------------------------
-
-from .bias import BiasMLP, AMLPBias
-
 # --- Neural / Network -----------------------------------------------------
 
 from .neural import NeuralNetwork
@@ -112,10 +108,6 @@ __all__ = [
     "Curriculum",
     "CurriculumStory",
     "CurriculumSentence",
-
-    # Bias
-    "BiasMLP",
-    "AMLPBias"
 
     # Neural / Network
     "NeuralNetwork",

@@ -4,7 +4,7 @@ from dmlg import WriterParams
 
 import time
 
-MODEL = "hyde"
+MODEL = "mini"
 PREFIX = "base"
 NUM_LINES = 1000
 MAX_CHAPTERS = 100

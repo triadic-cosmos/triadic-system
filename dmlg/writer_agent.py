@@ -18,7 +18,6 @@ from .context import ContextWindow, ModelInput
 from .glp_network import GlpNetwork, Evaluation
 from .training import TrainingSampleSentence
 from .curriculum import Curriculum, CurriculumSentence
-from .bias import BiasMLP, AMLPBias
 
 GRAMMAR_CHECK = False
 
@@ -102,16 +101,7 @@ class WriterAgent:
     # ------------------------------------------------------------
     # Learning and curriculum training
     # ------------------------------------------------------------
-        
-    def add_bias(self, hidden_size, epochs: int):
-        bias: BiasMLP = BiasMLP(self.configuration.other_hidden_size, hidden_size)
-        bias.pretrain_sinus(epochs)
-        self.glp_network.glp_network.bias = AMLPBias(bias)
-        
-    def plot_bias(self):
-        if self.glp_network.glp_network.bias:
-            self.glp_network.glp_network.bias.bias_mlp.plot()
-            
+                
     def train_matrix(self, curriculum: Curriculum, random_epochs: int):
         # Train sentences using random order
         for epoch in range(1, random_epochs + 1):
@@ -371,10 +361,7 @@ class WriterAgent:
         agent.glp_network = state["glp_network"]
         agent.training = state["training"]
         agent.tracking = state["tracking"]
-        
-        if hasattr(agent.glp_network, "glp_network"):
-            agent.glp_network.glp_network.initialize_bias()
-        
+                
         print(f"Loaded agent {agent.id}.")
         agent.show(True)
         return agent

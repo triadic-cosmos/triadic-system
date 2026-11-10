@@ -9,9 +9,9 @@ class Configuration:
     # ------------------------------------------------------------
     # GLP model parameters
     # ------------------------------------------------------------
-    first_hidden_size: int = 64
-    other_hidden_size: int = 64
-    token_embedding_dimension: int = 256
+    first_hidden_size: int = 128
+    other_hidden_size: int = 128
+    token_embedding_dimension: int = 48
     total_pages: int = 1000000
     max_page_input_size: int = 1
     
@@ -34,7 +34,7 @@ class Configuration:
     # Training parameters
     # ------------------------------------------------------------
     matrix_multiplier = 10
-    mlp_multiplier = 25
+    mlp_multiplier = 20
     show_epochs_step: int = 1000
     matrix_decay: float = 0.99999
     matrix_learning_rate: float = 0.001
