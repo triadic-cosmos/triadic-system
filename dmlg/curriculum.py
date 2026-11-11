@@ -130,6 +130,22 @@ class Curriculum:
     
             print(f"curriculum sentences = {len(self.sentences)}")
 
+    # Create for each chapter a separate curriculum
+    def split_by_chapters(self, min_sentences: int) -> List:
+        splitted = []
+        sentences = []
+        
+        for sentence in self.sentences:
+            if sentence.tokens[0].is_chapter():
+                if len(sentences) >= min_sentences:
+                    splitted.append(Curriculum(sentences))
+                    sentences = []
+            sentences.append(sentence)
+        
+        if len(sentences) >= min_sentences:
+            splitted.append(Curriculum(sentences))
+        return splitted
+
 def is_chapter_title(s: str) -> bool:
     if s.lower().startswith("chapter") or s.startswith("\\chapter"):
         return True

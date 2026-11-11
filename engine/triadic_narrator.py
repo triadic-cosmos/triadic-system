@@ -10,7 +10,16 @@ import re
 from .triadic_writer import TriadicWriter
 from .triadic_llm import TriadicLLM
 
-from dmlg import WriterParams, WriterStory
+from dmlg import (
+    WriterParams,
+    WriterStory,
+    WriterEnvironment,
+    Configuration,
+    AgentBuilder,
+    TrainingBatchBuilder,
+    WriterAgent,
+    Curriculum
+)
 
 FIX_PROMPT = (
 "Fix the following book chapter grammatically and semantically. "
@@ -74,11 +83,17 @@ BRIDGE_PROMPT = (
 "The second chapter has title '$TITLE2' and text: $SEQ2"
 )
 
+# Narrator book chapter
+@dataclass
+class TriadicNarratorChapter:
+    original_sentences: List[str]
+
 # Narrator configuration
 @dataclass(frozen=True)
 class TriadicNarratorParams:
     input_filename: str
     output_filename: str
+    write_mode: str = "w"
     world_prompt: str = ""
     max_chapters: int = 1000
     min_chapter_sentences: int = 15
@@ -86,7 +101,7 @@ class TriadicNarratorParams:
     min_transition_sentences: int = 2
     max_transition_sentences: int = 15
     min_score: int = 85
-    min_draft_score: int = 60
+    min_draft_score: int = 50
     min_transition_score: int = 90
     evaluations: int = 2
     max_retries: int = 10
@@ -94,16 +109,12 @@ class TriadicNarratorParams:
     max_tokens: int = 5000
     draft: bool = False
 
-# Narrator book chapter
-@dataclass
-class TriadicNarratorChapter:
-    original_sentences: List[str]
-     
 # Narrator
 @dataclass
 class TriadicNarrator:
     llm: TriadicLLM
     params: TriadicNarratorParams
+    start_chapter: TriadicNarratorChapter = None
 
     def read_chapters(self) -> List[TriadicNarratorChapter]:
         with open(self.params.input_filename, "r", encoding="utf-8-sig") as input_file:
@@ -132,12 +143,12 @@ class TriadicNarrator:
             return chapters
     
     def process_book(self):
-        with open(self.params.output_filename, "w", encoding='utf-8-sig') as output_file:             
+        with open(self.params.output_filename, self.params.write_mode, encoding='utf-8-sig') as output_file:             
             start = time.perf_counter()
 
             print("Processing book")
             chapters = self.read_chapters()[:self.params.max_chapters]
-            previous_chapter = None
+            previous_chapter = self.start_chapter
             index = 0
             
             while index < len(chapters):
@@ -216,11 +227,12 @@ class TriadicIterativeNarrator:
     writer: TriadicWriter
     params: TriadicNarratorParams
     writer_params: WriterParams
-
+    start_chapter: TriadicNarratorChapter = None
+    
     def process_book(self):
         print("Processing iterative book")
 
-        with open(self.params.output_filename, "w", encoding='utf-8-sig') as output_file:             
+        with open(self.params.output_filename, self.params.write_mode, encoding='utf-8-sig') as output_file:             
             start = time.perf_counter()
 
             ctx = self.writer.agent.new_context()
@@ -229,7 +241,7 @@ class TriadicIterativeNarrator:
             
             chapter_nr = 1
             line_nr = 0
-            previous_chapter = None
+            previous_chapter = self.start_chapter
             
             while chapter_nr <= self.params.max_chapters and line_nr < self.writer_params.lines:
                 print(f"Generating chapter {chapter_nr} at line {line_nr}")
@@ -341,11 +353,13 @@ class TriadicPromptNarrator:
     writer: TriadicWriter
     params: TriadicNarratorParams
     writer_params: WriterParams
+    start_chapter: TriadicNarratorChapter = None
+    chapter_increment: int = 0
 
-    def process_book(self):
+    def process_book(self) -> TriadicNarratorChapter:
         print("Processing prompt book")
 
-        with open(self.params.output_filename, "w", encoding='utf-8-sig') as output_file:             
+        with open(self.params.output_filename, self.params.write_mode, encoding='utf-8-sig') as output_file:             
             start = time.perf_counter()
 
             ctx = self.writer.agent.new_context()
@@ -354,10 +368,10 @@ class TriadicPromptNarrator:
             
             chapter_nr = 1
             line_nr = 0
-            previous_chapter = None
+            previous_chapter = self.start_chapter
             
             while chapter_nr <= self.params.max_chapters and line_nr < self.writer_params.lines:
-                print(f"Generating chapter {chapter_nr} at line {line_nr}")
+                print(f"Generating chapter {chapter_nr + self.chapter_increment} at line {line_nr}")
                 
                 # Generate chapter
                 copy_ctx = ctx.copy()
@@ -487,7 +501,7 @@ class TriadicPromptNarrator:
                         output_file.write(line + "\n")
                     output_file.write("\n")            
                 output_file.write(f"% {'-' * 50}\n")
-                output_file.write(f"% CHAPTER {chapter_nr} : SCORE = {chapter.moderated_score}\n")
+                output_file.write(f"% CHAPTER {chapter_nr + self.chapter_increment} : SCORE = {chapter.moderated_score}\n")
                 output_file.write(f"% DRAFT SCORE = {min(chapter.generation_scores)}\n")
                 if previous_chapter:
                     output_file.write(f"% TRANSITION SCORE = {chapter.transition_score}\n")
@@ -505,7 +519,82 @@ class TriadicPromptNarrator:
                 ctx = copy_ctx
 
             output_file.write(f"% Elapsed time : {time.perf_counter() - start:.1f} s\n\n")
+            return previous_chapter
 
+# Transform Narrator
+@dataclass
+class TriadicTransformNarrator:
+    llm: TriadicLLM
+    model: str
+    params: TriadicNarratorParams
+    writer_params: WriterParams
+    start_chapter: TriadicNarratorChapter = None
+
+    def process_book(self):
+        print("Processing transform book")
+
+        # Create transform specific params
+        transform_params: TriadicNarratorParams = TriadicNarratorParams(
+            input_filename="",
+            output_filename=self.params.output_filename,
+            write_mode="a",
+            world_prompt=self.params.world_prompt,
+            max_chapters=1,
+            max_retries=self.params.max_retries,
+            draft=self.params.draft)
+        
+        # Create configuration for a small temporary agent
+        configuration: Configuration = Configuration(self.model)
+        configuration.first_hidden_size = 96
+        configuration.other_hidden_size = 96
+        configuration.token_embedding_dimension = 48
+        configuration.matrix_multiplier = 15
+        configuration.mlp_multiplier = 30
+
+        # Build curriculum
+        builder: AgentBuilder = AgentBuilder(configuration)
+        environment: WriterEnvironment = builder.build_environment(configuration, "transform")
+        curriculum: List[Curriculum] = builder.build_curriculum(environment, "book")
+        chapters: List[Curriculum] = []
+        for c in curriculum:
+            chapters += c.split_by_chapters(self.params.min_chapter_sentences)
+        print(f"chapters = {len(chapters)}")
+
+        # Create transformed book
+        chapter_nr = 1        
+        current_chapter = self.start_chapter
+
+        for chapter in chapters:
+            print(f"\n>>>>> CHAPTER {chapter_nr} <<<<<")
+            
+            # Create temporary agent
+            agent: WriterAgent = WriterAgent(environment, self.model)
+            writer: TriadicWriter = TriadicWriter(self.model, "transform")
+            writer.agent = agent
+            if chapter_nr == 1:
+                agent.show()
+            
+            # Prepare training
+            training_builder: TrainingBatchBuilder = TrainingBatchBuilder(agent)
+            combined: Curriculum = training_builder.build_curriculum([chapter], 0)
+            sentences = len(combined.sentences)
+            print(f"sentences = {sentences}")
+
+            # Train agent
+            matrix_epochs = configuration.matrix_multiplier * sentences            
+            print(f"Training matrix for {matrix_epochs} epochs")            
+            agent.train_matrix(combined, matrix_epochs)
+            mlp_epochs = configuration.mlp_multiplier * sentences
+            print(f"Training MLP for {mlp_epochs} epochs")
+            agent.train_mlp(combined, mlp_epochs)
+            agent.evaluate_curriculum(combined)
+
+            # Create prompt narrator
+            narrator: TriadicPromptNarrator = TriadicPromptNarrator(
+                self.llm, writer, transform_params, self.writer_params,
+                current_chapter, chapter_nr - 1)
+            current_chapter = narrator.process_book()
+            chapter_nr += 1
 
 # ----- TRANSITION HELPERS -----
 

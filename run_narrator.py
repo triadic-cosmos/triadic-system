@@ -3,6 +3,7 @@ from engine.triadic_narrator import (
     TriadicNarrator,
     TriadicIterativeNarrator,
     TriadicPromptNarrator,
+    TriadicTransformNarrator,
     TriadicNarratorParams
 )
 from engine.triadic_writer import TriadicWriter
@@ -11,18 +12,19 @@ from engine.triadic_llm import TriadicLLM
 from dmlg import WriterParams, DATA_FOLDER
 
 # Parameters
-MODEL = "mini"
-MODEL_PREFIX = "base"
-DATASET_FOLDER = DATA_FOLDER + MODEL
+MODELS = ["hyde"]
+MODEL_PREFIXES = ["base"]
 PREFIXES = ["run1"]
+CAS_VECTORS = [None]
 MAX_CHAPTERS = 100
 MAX_RETRIES = 10
-NUM_LINES = 1000
 DRAFT = False
-PROMPT = True
+PROMPT = False
+TRANSFORM = True
 ITERATIVE = True
 LEMMA_BLACKLIST = {}
-CAS_VECTORS = [ None ]
+SUFFIX = "_transform_book" if TRANSFORM else "_iter_book" if PROMPT or ITERATIVE else "_book"
+NUM_LINES = 50 if TRANSFORM else 1000
 
 WORLD_PROMPT = (
 "The main characters are Dr Minsky as chief scientist and Alice as CEO. "
@@ -34,29 +36,26 @@ WORLD_PROMPT = (
 "The characters must identify risks, solve emerging problems, and secure the future of the organization. "
 "Conflict should emerge from uncertainty, competing interests, and difficult strategic decisions. "
 "Add triadic influences using the information, energy, and geometry triad where applicable. "
-"Information represents knowledge, transparency, and understanding. "
-"Energy represents motivation, ambition, conflict, and change. "
-"Geometry represents structure, organization, balance, and concentration of power. "
+"Information represents knowledge, energy represents transformation, geometry represents structure. "
 )
 
 # Main
 llm: TriadicLLM = TriadicLLM()
 
-# Create writer when needed
-if PROMPT or ITERATIVE:
-    writer: TriadicWriter = TriadicWriter(MODEL, MODEL_PREFIX)
-    suffix = "_iter_book"
-else:
-    suffix = "_book"
-
 for index in range(len(PREFIXES)):
+    model = MODELS[index]
+    model_prefix = MODEL_PREFIXES[index]        
     prefix = PREFIXES[index]
     cas_vector = CAS_VECTORS[index] # put to None if no CAS
+    dataset_folder = DATA_FOLDER + model
     print(f"Processing book with prefix {prefix} and CAS {cas_vector}...")
-    
+
+    if not TRANSFORM and (PROMPT or ITERATIVE):
+        writer: TriadicWriter = TriadicWriter(model, model_prefix)
+
     params: TriadicNarratorParams = TriadicNarratorParams(
-        input_filename=f"{DATASET_FOLDER}/output/{prefix}_output.txt",
-        output_filename=f"{DATASET_FOLDER}/narrator/{prefix}{suffix}.txt",
+        input_filename=f"{dataset_folder}/output/{prefix}_output.txt",
+        output_filename=f"{dataset_folder}/narrator/{prefix}{SUFFIX}.txt",
         world_prompt=WORLD_PROMPT,
         max_chapters=MAX_CHAPTERS,
         max_retries=MAX_RETRIES,
@@ -69,8 +68,11 @@ for index in range(len(PREFIXES)):
         cas_vector = cas_vector
     )
 
-    # Create the desired narrotor
-    if PROMPT:
+    # Create the desired narrator
+    if TRANSFORM:
+        narrator: TriadicTransformNarrator = TriadicTransformNarrator(
+            llm, model, params, writer_params)
+    elif PROMPT:
         narrator: TriadicPromptNarrator = TriadicPromptNarrator(
             llm, writer, params, writer_params)
     elif ITERATIVE:                
