@@ -12,9 +12,9 @@ from engine.triadic_llm import TriadicLLM
 from dmlg import WriterParams, DATA_FOLDER
 
 # Parameters
-MODELS = ["hyde"]
+MODELS = ["alice"]
 MODEL_PREFIXES = ["base"]
-PREFIXES = ["run1"]
+PREFIXES = ["run2"]
 CAS_VECTORS = [None]
 MAX_CHAPTERS = 100
 MAX_RETRIES = 10
@@ -35,8 +35,7 @@ WORLD_PROMPT = (
 "Public trust, transparency, and long-term sustainability are recurring themes. "
 "The characters must identify risks, solve emerging problems, and secure the future of the organization. "
 "Conflict should emerge from uncertainty, competing interests, and difficult strategic decisions. "
-"Add triadic influences using the information, energy, and geometry triad where applicable. "
-"Information represents knowledge, energy represents transformation, geometry represents structure. "
+"Add triadic influences using the knowledge, transformation, and structure triad where applicable. "
 )
 
 # Main

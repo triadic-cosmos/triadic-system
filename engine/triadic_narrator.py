@@ -551,7 +551,7 @@ class TriadicTransformNarrator:
         configuration.matrix_multiplier = 15
         configuration.mlp_multiplier = 30
 
-        # Build curriculum
+        # Build curriculum for chapters
         builder: AgentBuilder = AgentBuilder(configuration)
         environment: WriterEnvironment = builder.build_environment(configuration, "transform")
         curriculum: List[Curriculum] = builder.build_curriculum(environment, "book")
@@ -560,10 +560,11 @@ class TriadicTransformNarrator:
             chapters += c.split_by_chapters(self.params.min_chapter_sentences)
         print(f"chapters = {len(chapters)}")
 
-        # Create transformed book
+        # Initialize chapters
         chapter_nr = 1        
         current_chapter = self.start_chapter
 
+        # Create transformed book chapters
         for chapter in chapters:
             print(f"\n>>>>> CHAPTER {chapter_nr} <<<<<")
             
@@ -589,12 +590,16 @@ class TriadicTransformNarrator:
             agent.train_mlp(combined, mlp_epochs)
             agent.evaluate_curriculum(combined)
 
-            # Create prompt narrator
+            # Use prompt narrator to create chapter
             narrator: TriadicPromptNarrator = TriadicPromptNarrator(
                 self.llm, writer, transform_params, self.writer_params,
                 current_chapter, chapter_nr - 1)
             current_chapter = narrator.process_book()
+            
+            # Advance to next chapter
             chapter_nr += 1
+            if chapter_nr > self.params.max_chapters:
+                break
 
 # ----- TRANSITION HELPERS -----
 
