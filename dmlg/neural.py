@@ -217,3 +217,62 @@ class NeuralNetwork(nn.Module):
         b5_new.copy_(b5_old)
 
         return new_model
+
+    # ------------------------------------------------------------
+    # Network Merging
+    # ------------------------------------------------------------
+    
+    @staticmethod
+    def merge(
+        models: list["NeuralNetwork"],
+        weights: list[float]
+    ) -> "NeuralNetwork":
+
+        if len(models) < 2:
+            raise ValueError("At least two models are needed")
+
+        if len(models) != len(weights):
+            raise ValueError("Number of models and weights must match")
+
+        total = sum(weights)
+        if total == 0:
+            raise ValueError("Weights sum to zero")
+
+        # Normalize weights
+        weights = [w / total for w in weights]
+
+        # Architecture check
+        first = models[0]
+
+        for m in models[1:]:
+            if (
+                m.input_size != first.input_size
+                or m.first_hidden_size != first.first_hidden_size
+                or m.other_hidden_size != first.other_hidden_size
+                or m.output_size != first.output_size
+            ):
+                raise ValueError(
+                    "All models must have identical architecture"
+                )
+
+        merged = NeuralNetwork(
+            first.input_size,
+            first.first_hidden_size,
+            first.other_hidden_size,
+            first.output_size
+        )
+
+        with torch.no_grad():
+
+            merged_state = merged.state_dict()
+
+            for key in merged_state.keys():
+
+                merged_state[key] = sum(
+                    w * model.state_dict()[key]
+                    for w, model in zip(weights, models)
+                )
+
+            merged.load_state_dict(merged_state)
+
+        return merged

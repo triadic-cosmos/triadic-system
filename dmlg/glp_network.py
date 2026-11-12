@@ -89,7 +89,7 @@ class GlpNetwork:
             output_tokens.update(p.output_tokens)
         return output_tokens
 
-    def add_to_page(self, tt: Token, prev_lemma: str):
+    def add_to_page(self, tt: TargetToken, prev_lemma: str):
         page = self.pages.get(prev_lemma)
         if page is None:
             # find a page that has the same target token
@@ -151,6 +151,72 @@ class GlpNetwork:
 
     def create_lemma_embedding_dictionary(self) -> LemmaEmbeddingDictionary:
         return LemmaEmbeddingDictionary(self.configuration.token_embedding_dimension)
+
+    # ------------------------------------------------------------
+    # Model merging
+    # ------------------------------------------------------------
+
+    @staticmethod
+    def merge_predictor_matrices(
+        matrices: list[torch.Tensor],
+        weights: list[float]
+    ) -> torch.Tensor:
+
+        if len(matrices) < 2:
+            raise ValueError("At least two matrices are needed")
+
+        if len(matrices) != len(weights):
+            raise ValueError(
+                "Number of matrices and weights must match"
+            )
+
+        total = sum(weights)
+
+        if total == 0:
+            raise ValueError("Weights sum to zero")
+
+        # normalize
+        weights = [w / total for w in weights]
+
+        shape = matrices[0].shape
+
+        for m in matrices[1:]:
+            if m.shape != shape:
+                raise ValueError(
+                    "All predictor matrices must have equal shape"
+                )
+
+        merged = torch.zeros_like(matrices[0])
+
+        for w, m in zip(weights, matrices):
+            merged += w * m
+
+        return merged
+
+    @staticmethod
+    def merge_networks(
+        configuration: Configuration,
+        networks: list["GlpNetwork"],
+        weights: list[float]
+    ) -> "GlpNetwork":
+        merged: GlpNetwork = GlpNetwork(configuration)
+
+        # Merge predictor matrices
+        matrix = [network.predictor_matrix for network in networks]        
+        merged.predictor_matrix = GlpNetwork.merge_predictor_matrices(matrix, weights)
+
+        # Merge neural networks
+        neural = [network.glp_network for network in networks]
+        merged.glp_network = NeuralNetwork.merge(neural, weights)
+
+        # Merge pages
+        for network in networks:
+            for page in network.page_list:
+                for input_token in page.input_tokens:
+                    for output_token in page.output_tokens:
+                        merged.add_to_page(output_token, input_token)
+                        
+        return merged
 
     # ------------------------------------------------------------
     # Learning

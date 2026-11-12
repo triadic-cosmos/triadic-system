@@ -61,7 +61,6 @@ class CurrentSentence:
 class ContextWindow:
     configuration: Configuration
     lemma_embedding_dict: any
-    tracking: any
         
     def __post_init__(self):
         self._cas_vector = []
@@ -106,7 +105,7 @@ class ContextWindow:
         self._sentence_memory = vector + self._sentence_memory[:-len(vector)]
     
     def copy(self) -> "ContextWindow":
-        ctx: ContextWindow = ContextWindow(self.configuration, self.lemma_embedding_dict, self.tracking)
+        ctx: ContextWindow = ContextWindow(self.configuration, self.lemma_embedding_dict)
 
         ctx._current_tokens = self._current_tokens.copy()        
         ctx._current_sentence = self._current_sentence.copy()

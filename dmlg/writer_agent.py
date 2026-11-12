@@ -78,7 +78,6 @@ class WriterAgent:
     rng: random.Random = field(init=False)
     configuration: Configuration = field(init=False)
     glp_network: GlpNetwork = field(init=False)
-    tracking: dict = field(init=False)
     training: TrainingStats = field(init=False)
 
     def __init__(self, environment: WriterEnvironment, id: str):
@@ -87,7 +86,6 @@ class WriterAgent:
         self.id = id
         self.rng = random.Random()
         self.glp_network = GlpNetwork(self.configuration)
-        self.tracking = None
         self.training = TrainingStats()
 
     def __str__(self):
@@ -95,8 +93,7 @@ class WriterAgent:
 
     def new_context(self) -> ContextWindow:
         return ContextWindow(self.configuration,
-                             self.glp_network.lemma_embedding_dict,
-                             self.tracking)
+                             self.glp_network.lemma_embedding_dict)
 
     # ------------------------------------------------------------
     # Learning and curriculum training
@@ -345,8 +342,7 @@ class WriterAgent:
             "id": self.id,
             "config": self.configuration,
             "glp_network": self.glp_network,
-            "training": self.training,
-            "tracking": self.tracking
+            "training": self.training
         }
         with open(path, "wb") as f:
             pickle.dump(state, f)
@@ -360,7 +356,6 @@ class WriterAgent:
         agent.configuration = state["config"]
         agent.glp_network = state["glp_network"]
         agent.training = state["training"]
-        agent.tracking = state["tracking"]
                 
         print(f"Loaded agent {agent.id}.")
         agent.show(True)
